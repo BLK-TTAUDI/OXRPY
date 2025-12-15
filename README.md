@@ -8,11 +8,6 @@ Install from PyPI:
 pip install oxrpy
 ```
 
-Or from source:
-```
-pip install -r requirements.txt
-```
-
 ## Usage
 ```python
 from oxrpy import OxfordAPI
@@ -85,6 +80,8 @@ except OxfordAPIError as e:
 - `get_modcalls()`: Returns recent moderator call requests.
 - `get_vehicles()`: Returns vehicles currently spawned.
 - `execute_command(command)`: Executes a permitted command (e.g., "announce Hello!").
+- `get_robberies()`: Returns recent robberies (if supported by the API).
+- `get_radiocalls()`: Returns recent radio calls (if supported by the API).
 
 ## API Endpoints
 get_server(): Returns general server information.
@@ -218,6 +215,36 @@ Example response:
 {
   "message": "Command sent successfully"
 }
+```
+
+get_robberies(): Returns recent robberies (if supported by the API).
+Example response:
+```json
+[
+  {
+    "Timestamp": 1700000400,
+    "RobberyType": "Bank",
+    "Location": "High Street",
+    "InvolvedParties": [123, 456],
+    "Outcome": "Suspects fled",
+    "Value": 10000
+  }
+]
+```
+
+get_radiocalls(): Returns recent radio calls (if supported by the API).
+Example response:
+```json
+[
+  {
+    "Timestamp": 1700000500,
+    "CallerId": 123,
+    "CallerName": "OfficerA",
+    "Message": "In pursuit of a robbery suspect",
+    "Location": "Near the bank",
+    "Priority": "High"
+  }
+]
 ```
 
 
