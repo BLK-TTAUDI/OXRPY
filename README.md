@@ -4,32 +4,44 @@ A Python wrapper for the Oxford Response API.
 ## Installation
 
 Install from PyPI:
-```python
+```
 pip install oxrpy
 ```
 
-```python
+Or from source:
+```
+pip install -r requirements.txt
+```
+
 ## Usage
+```python
 from oxrpy import OxfordAPI
 
 # Initialize with your server ID and key
 api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
 
-# Get server information
+# Use all methods directly
 server_info = api.get_server()
-print(server_info)
 
-# Get current players
-players = api.get_players()
-print(players)
+# Or use grouped managers
+servers = api.servers
+server_info = servers.get_server()
+players = servers.get_players()
 
-# Get queue
-queue = api.get_queue()
-print(queue)
+logs = api.logs
+kill_logs = logs.get_killlogs()
 
-# Get bans
-bans = api.get_bans()
-print(bans)
+commands = api.commands
+result = commands.execute_command("announce Hello!")
+```
+
+You can also import the managers directly:
+```python
+from oxrpy import Servers, Logs, Commands
+
+servers = Servers(api)
+logs = Logs(api)
+commands = Commands(api)
 ```
 
 ## Features
@@ -38,6 +50,18 @@ print(bans)
 - Request timeouts
 - Logging support
 - Input validation
+
+## Supported Endpoints
+
+- `get_server()`: Returns general server information.
+- `get_players()`: Returns list of current players.
+- `get_queue()`: Returns the reserved server queue.
+- `get_bans()`: Returns active bans.
+- `get_killlogs()`: Returns recent kill logs (max 100 entries).
+- `get_commandlogs()`: Returns recent command execution logs.
+- `get_modcalls()`: Returns recent moderator call requests.
+- `get_vehicles()`: Returns vehicles currently spawned.
+- `execute_command(command)`: Executes a permitted command (e.g., "announce Hello!").
 
 ## API Endpoints
 get_server(): Returns general server information.
@@ -172,5 +196,6 @@ Example response:
   "message": "Command sent successfully"
 }
 ```
+
 
 
