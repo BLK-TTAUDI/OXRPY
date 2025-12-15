@@ -1,6 +1,6 @@
 # oxrpy
 
-A Python wrapper for the Oxford Response API.
+A Python wrapper for the Oxford RP API.
 
 ## Installation
 
@@ -32,6 +32,14 @@ print(queue)
 # Get bans
 bans = api.get_bans()
 print(bans)
+
+# Get kill logs
+killlogs = api.get_killlogs()
+print(killlogs)
+
+# Execute a command
+result = api.execute_command("announce Hello from API!")
+print(result)
 ```
 
 ## API Endpoints
@@ -40,7 +48,10 @@ print(bans)
 - `get_players()`: Returns list of current players.
 - `get_queue()`: Returns the reserved server queue.
 - `get_bans()`: Returns active bans.
-
+- `get_killlogs()`: Returns recent kill logs (max 100 entries).
+- `get_commandlogs()`: Returns recent command execution logs.
+- `get_modcalls()`: Returns recent moderator call requests.
+- `get_vehicles()`: Returns vehicles currently spawned.
+- `execute_command(command)`: Executes a permitted command (e.g., "announce Hello!").
 
 All methods return the JSON response from the API.
-
