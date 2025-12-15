@@ -1,6 +1,6 @@
 # oxrpy
 
-A Python wrapper for the Oxford RP API.
+A Python wrapper for the Oxford Response API.
 
 ## Installation
 
@@ -43,3 +43,4 @@ print(bans)
 
 
 All methods return the JSON response from the API.
+
