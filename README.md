@@ -1,17 +1,13 @@
 # oxrpy
-
 A Python wrapper for the Oxford RP API.
 
 ## Installation
-
+```python
 Install from PyPI:
 ```
-pip install oxrpy
-```
-
-## Usage
 
 ```python
+## Usage
 from oxrpy import OxfordAPI
 
 # Initialize with your server ID and key
@@ -32,26 +28,71 @@ print(queue)
 # Get bans
 bans = api.get_bans()
 print(bans)
-
-# Get kill logs
-killlogs = api.get_killlogs()
-print(killlogs)
-
-# Execute a command
-result = api.execute_command("announce Hello from API!")
-print(result)
 ```
 
+## Features
+- Automatic rate limiting (5 requests per second max)
+- Comprehensive error handling with custom exceptions
+- Request timeouts
+- Logging support
+- Input validation
+
 ## API Endpoints
+get_server(): Returns general server information.
+Example response:
+```json
+{
+  "Name": "Oxford Roleplay",
+  "StyledName": "Oxford RP",
+  "Description": "UK emergency roleplay server",
+  "Tags": ["UK", "RP"],
+  "ThemeColour": "#ffffff",
+  "OwnerId": 123456789,
+  "CurrentPlayers": 18,
+  "MaxPlayers": 32,
+  "JoinCode": "OXFD-ABCD",
+  "CreatedAt": 1700000000,
+  "Packages": []
+}
+```
 
-- `get_server()`: Returns general server information.
-- `get_players()`: Returns list of current players.
-- `get_queue()`: Returns the reserved server queue.
-- `get_bans()`: Returns active bans.
-- `get_killlogs()`: Returns recent kill logs (max 100 entries).
-- `get_commandlogs()`: Returns recent command execution logs.
-- `get_modcalls()`: Returns recent moderator call requests.
-- `get_vehicles()`: Returns vehicles currently spawned.
-- `execute_command(command)`: Executes a permitted command (e.g., "announce Hello!").
+get_players(): Returns list of current players.
+Example response:
+```json
+[
+  {
+    "Username": "PlayerOne",
+    "DisplayName": "PlayerOne",
+    "UserId": 12345,
+    "Team": "Civilian",
+    "WantedLevel": 0,
+    "Permission": "Admin",
+    "Callsign": "A12",
+    "Location": "Near Oxford City Centre"
+  }
+]
+```
 
-All methods return the JSON response from the API.
+get_queue(): Returns the reserved server queue.
+Example response:
+```json
+{
+  "total": 2,
+  "users": [12345, 67890]
+}
+```
+
+get_bans(): Returns active bans.
+Example response:
+```json
+[
+  {
+    "UserId": 12345,
+    "Username": "BannedUser",
+    "Reason": "Fail RP",
+    "BannedBy": "API",
+    "BannedById": 2,
+    "Expiry": 1701000000
+  }
+]
+```
