@@ -2,8 +2,10 @@
 A Python wrapper for the Oxford RP API.
 
 ## Installation
-```python
+
 Install from PyPI:
+```python
+pip install oxrpy
 ```
 
 ```python
@@ -96,3 +98,4 @@ Example response:
   }
 ]
 ```
+
