@@ -22,14 +22,17 @@ api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
 
 # Use all methods directly
 server_info = api.get_server()
+players = api.get_players()
 
-# Or use grouped managers
+# Or use grouped managers via properties
 servers = api.servers
 server_info = servers.get_server()
 players = servers.get_players()
+bans = servers.get_bans()
 
 logs = api.logs
 kill_logs = logs.get_killlogs()
+mod_calls = logs.get_modcalls()
 
 commands = api.commands
 result = commands.execute_command("announce Hello!")
@@ -37,11 +40,31 @@ result = commands.execute_command("announce Hello!")
 
 You can also import the managers directly:
 ```python
-from oxrpy import Servers, Logs, Commands
+from oxrpy import OxfordAPI, Servers, Logs, Commands
+
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
 
 servers = Servers(api)
 logs = Logs(api)
 commands = Commands(api)
+
+# Now use them
+server_info = servers.get_server()
+kill_logs = logs.get_killlogs()
+result = commands.execute_command("kick PlayerOne")
+```
+
+## Error Handling
+```python
+from oxrpy import OxfordAPI, OxfordAPIError
+
+api = OxfordAPI(server_id="your_id", server_key="your_key")
+
+try:
+    server_info = api.get_server()
+    print("Server info:", server_info)
+except OxfordAPIError as e:
+    print(f"API Error: {e}")
 ```
 
 ## Features
