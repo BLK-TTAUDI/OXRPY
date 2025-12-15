@@ -9,11 +9,6 @@ Install from PyPI:
 pip install oxrpy
 ```
 
-Or from source:
-```
-pip install -r requirements.txt
-```
-
 ## Usage
 
 ```python
@@ -45,5 +40,6 @@ print(bans)
 - `get_players()`: Returns list of current players.
 - `get_queue()`: Returns the reserved server queue.
 - `get_bans()`: Returns active bans.
+
 
 All methods return the JSON response from the API.
