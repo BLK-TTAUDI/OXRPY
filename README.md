@@ -99,3 +99,77 @@ Example response:
 ]
 ```
 
+get_killlogs(): Returns recent kill logs (maximum 100 entries).
+Example response:
+```json
+[
+  {
+    "Timestamp": 1700000100,
+    "KillerUserId": 123,
+    "KillerUsername": "OfficerA",
+    "VictimUserId": 456,
+    "VictimUsername": "SuspectB",
+    "Distance": 42,
+    "Weapon": "Taser"
+  }
+]
+```
+
+get_commandlogs(): Returns recent command execution logs.
+Example response:
+```json
+[
+  {
+    "Timestamp": 1700000200,
+    "UserId": 789,
+    "Username": "AdminUser",
+    "Command": "kick",
+    "Args": ["PlayerOne"]
+  }
+]
+```
+
+get_modcalls(): Returns recent moderator call requests.
+Example response:
+```json
+[
+  {
+    "Timestamp": 1700000300,
+    "CallerUserId": 123,
+    "CallerUsername": "PlayerOne",
+    "CallerDisplayName": "Player One",
+    "CaseId": "CASE-001",
+    "Responders": [
+      {
+        "UserId": 789,
+        "Username": "ModeratorA"
+      }
+    ]
+  }
+]
+```
+
+get_vehicles(): Returns vehicles currently spawned in the server.
+Example response:
+```json
+[
+  {
+    "OwnerUserId": 123,
+    "OwnerUsername": "PlayerOne",
+    "Registration": "OX12 ABC",
+    "Model": "Volvo XC90",
+    "Electric": false,
+    "ELS": true,
+    "ELS_Style": "UK"
+  }
+]
+```
+
+execute_command(command): Executes a permitted command on the server.
+Example response:
+```json
+{
+  "message": "Command sent successfully"
+}
+```
+
