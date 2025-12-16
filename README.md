@@ -88,8 +88,8 @@ get_server(): Returns general server information.
 Example response:
 ```json
 {
-  "Name": "Oxford Roleplay",
-  "StyledName": "Oxford RP",
+  "Name": "Oxfordshire Roleplay Community I Strict",
+  "StyledName": "<font color="#CF102D">Oxfordshire Roleplay Community I Strict</font>",
   "Description": "UK emergency roleplay server",
   "Tags": ["UK", "RP"],
   "ThemeColour": "#ffffff",
@@ -246,6 +246,7 @@ Example response:
   }
 ]
 ```
+
 
 
 
