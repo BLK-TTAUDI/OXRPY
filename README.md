@@ -8,11 +8,6 @@ Install from PyPI:
 pip install oxrpy
 ```
 
-Or from source:
-```
-pip install -r requirements.txt
-```
-
 ## Usage
 ```python
 from oxrpy import OxfordAPI
@@ -36,6 +31,21 @@ mod_calls = logs.get_modcalls()
 
 commands = api.commands
 result = commands.execute_command("announce Hello!")
+```
+
+### Advanced Configuration
+```python
+# Default rate limiting (recommended for most users)
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
+# or explicitly:
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="auto")
+
+# Disable rate limiting entirely (use with caution)
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="none")
+
+# Custom rate limiting (specify seconds between requests)
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=1.0)  # 1 second
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=0.5)  # 0.5 seconds
 ```
 
 You can also import the managers directly:
@@ -68,7 +78,7 @@ except OxfordAPIError as e:
 ```
 
 ## Features
-- Automatic rate limiting (5 requests per second max)
+- Configurable rate limiting ("auto", "none", or custom seconds)
 - Comprehensive error handling with custom exceptions
 - Request timeouts
 - Logging support
@@ -222,6 +232,7 @@ Example response:
 }
 ```
 
+get_robberies(): Returns the current status of all robbery locations.
 Example response:
 ```json
 [
@@ -238,6 +249,7 @@ Example response:
 ]
 ```
 
+get_radiocalls(): Returns recent radio calls.
 Example response:
 ```json
 [
