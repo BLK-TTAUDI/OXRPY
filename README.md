@@ -35,17 +35,28 @@ result = commands.execute_command("announce Hello!")
 
 ### Advanced Configuration
 ```python
-# Default rate limiting (recommended for most users)
+# Default rate limiting (recommended for most users) - ~29 requests/second with burst capacity
+# Uses token bucket algorithm for smooth throttling and burst handling
 api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
 # or explicitly:
 api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="auto")
+
+# For heavy command usage (execute_command), use stricter rate limiting
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=1.0)
 
 # Disable rate limiting entirely (use with caution)
 api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="none")
 
 # Custom rate limiting (specify seconds between requests)
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=1.0)  # 1 second
 api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=0.5)  # 0.5 seconds
+
+# Configure retry behavior for rate-limited requests
+api = OxfordAPI(
+    server_id="your_server_id", 
+    server_key="your_server_key", 
+    rate_limit="auto",
+    max_retries=5  # Retry up to 5 times on rate limit errors
+)
 ```
 
 You can also import the managers directly:
@@ -66,19 +77,24 @@ result = commands.execute_command("kick PlayerOne")
 
 ## Error Handling
 ```python
-from oxrpy import OxfordAPI, OxfordAPIError
+from oxrpy import OxfordAPI, OxfordAPIError, RateLimitError
 
 api = OxfordAPI(server_id="your_id", server_key="your_key")
 
 try:
     server_info = api.get_server()
     print("Server info:", server_info)
+except RateLimitError as e:
+    print(f"Rate limit exceeded: {e}")
+    # Handle rate limiting (e.g., wait and retry)
 except OxfordAPIError as e:
     print(f"API Error: {e}")
 ```
 
 ## Features
-- Configurable rate limiting ("auto", "none", or custom seconds)
+- **Advanced Rate Limiting**: Token bucket algorithm with burst capacity and automatic retries
+- **Configurable Retry Logic**: Exponential backoff for rate-limited requests
+- **Separate Command Limiting**: Stricter 1/sec limit for command execution endpoints
 - Comprehensive error handling with custom exceptions
 - Request timeouts
 - Logging support
@@ -263,6 +279,7 @@ Example response:
   }
 ]
 ```
+
 
 
 
