@@ -13,7 +13,7 @@ pip install oxrpy
 from oxrpy import OxfordAPI
 
 # Initialize with your server ID and key
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
+api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="auto")
 
 # Use all methods directly
 server_info = api.get_server()
@@ -108,6 +108,7 @@ except OxfordAPIError as e:
 - `get_bans()`: Returns active bans.
 - `get_killlogs()`: Returns recent kill logs (max 100 entries).
 - `get_commandlogs()`: Returns recent command execution logs.
+- `get_joinlogs()`: Returns recent player join/leave logs.
 - `get_modcalls()`: Returns recent moderator call requests.
 - `get_vehicles()`: Returns vehicles currently spawned.
 - `execute_command(command)`: Executes a permitted command (e.g., "announce Hello!").
@@ -204,6 +205,25 @@ Example response:
 ]
 ```
 
+get_joinlogs(): Returns recent player join/leave logs.
+Example response:
+```json
+[
+  {
+    "Timestamp": 1700000250,
+    "UserId": 12345,
+    "Username": "PlayerOne",
+    "Action": "joined"
+  },
+  {
+    "Timestamp": 1700000260,
+    "UserId": 67890,
+    "Username": "PlayerTwo",
+    "Action": "left"
+  }
+]
+```
+
 get_modcalls(): Returns recent moderator call requests.
 Example response:
 ```json
@@ -279,7 +299,6 @@ Example response:
   }
 ]
 ```
-
 
 
 
