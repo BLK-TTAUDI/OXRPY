@@ -13,7 +13,7 @@ pip install oxrpy
 from oxrpy import OxfordAPI
 
 # Initialize with your server key (server-id is no longer required)
-api = OxfordAPI(server_key="your_server_key")
+api = OxfordAPI(server_key="your_server_key", rate_limit="auto")
 
 # Use all methods directly
 server_info = api.get_server()
@@ -65,7 +65,7 @@ You can also import the managers directly:
 ```python
 from oxrpy import OxfordAPI, Servers, Logs, Commands
 
-api = OxfordAPI(server_key="your_server_key")
+api = OxfordAPI(server_key="your_server_key", rate_limit="auto")
 
 servers = Servers(api)
 logs = Logs(api)
@@ -81,7 +81,7 @@ result = commands.execute_command("kick PlayerOne")
 ```python
 from oxrpy import OxfordAPI, OxfordAPIError, RateLimitError
 
-api = OxfordAPI(server_id="your_id", server_key="your_key")
+api = OxfordAPI(server_key="your_key")
 
 try:
     server_info = api.get_server()
@@ -301,6 +301,7 @@ Example response:
   }
 ]
 ```
+
 
 
 
