@@ -12,8 +12,8 @@ pip install oxrpy
 ```python
 from oxrpy import OxfordAPI
 
-# Initialize with your server ID and key
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="auto")
+# Initialize with your server key (server-id is no longer required)
+api = OxfordAPI(server_key="your_server_key")
 
 # Use all methods directly
 server_info = api.get_server()
@@ -37,33 +37,35 @@ result = commands.execute_command("announce Hello!")
 ```python
 # Default rate limiting (recommended for most users) - ~29 requests/second with burst capacity
 # Uses token bucket algorithm for smooth throttling and burst handling
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
+api = OxfordAPI(server_key="your_server_key")
 # or explicitly:
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="auto")
+api = OxfordAPI(server_key="your_server_key", rate_limit="auto")
 
 # For heavy command usage (execute_command), use stricter rate limiting
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=1.0)
+api = OxfordAPI(server_key="your_server_key", rate_limit=1.0)
 
 # Disable rate limiting entirely (use with caution)
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit="none")
+api = OxfordAPI(server_key="your_server_key", rate_limit="none")
 
 # Custom rate limiting (specify seconds between requests)
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key", rate_limit=0.5)  # 0.5 seconds
+api = OxfordAPI(server_key="your_server_key", rate_limit=0.5)  # 0.5 seconds
 
 # Configure retry behavior for rate-limited requests
 api = OxfordAPI(
-    server_id="your_server_id", 
     server_key="your_server_key", 
     rate_limit="auto",
     max_retries=5  # Retry up to 5 times on rate limit errors
 )
+
+# Legacy usage with server-id (still supported for backward compatibility)
+api = OxfordAPI(server_key="your_server_key", server_id="your_server_id")
 ```
 
 You can also import the managers directly:
 ```python
 from oxrpy import OxfordAPI, Servers, Logs, Commands
 
-api = OxfordAPI(server_id="your_server_id", server_key="your_server_key")
+api = OxfordAPI(server_key="your_server_key")
 
 servers = Servers(api)
 logs = Logs(api)
@@ -299,6 +301,7 @@ Example response:
   }
 ]
 ```
+
 
 
 
