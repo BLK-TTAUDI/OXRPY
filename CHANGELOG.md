@@ -23,7 +23,7 @@ endpoints 1.x used stop working on 1 January 2027, so **upgrade before then**.
 - `server_key` is always required. `global_key` is gone. App keys (`app_key=`) are sent
   **with** a server key. Passing `global_key` warns and is treated as `app_key`.
 - `server_id` is ignored (with a warning).
-- Requires Python 3.9+.
+- Requires Python 3.10+.
 
 ### New
 
