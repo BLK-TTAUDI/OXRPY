@@ -1,17 +1,23 @@
 # oxrpy
 
-A Python wrapper for the [Oxford Response private server API](https://docs.oxfd.re/).
+A Python wrapper for the [Oxford Response private server API](https://docs.oxfd.re/). Use it to
+read what's happening on your server and run commands on it from your own bot, website or tool.
 
 ```
 pip install oxrpy
 ```
 
-> **2.0 targets the current API.** The old per-section endpoints (`/v1/server/players`,
-> `/v1/server/vehicles`, …) stop working on **1 January 2027**. oxrpy 2.x only uses
-> `GET /v1/server` and `POST /v1/server/command`, so it keeps working after that date.
-> Upgrading from 1.x? See [CHANGELOG.md](CHANGELOG.md).
+You'll need Python 3.10 or newer.
 
-## Quick start
+> **Upgrading from 1.x?** Oxford is switching off the old endpoints (`/v1/server/players`,
+> `/v1/server/vehicles` and so on) on **1 January 2027**. Version 2 uses the new API, so it'll
+> keep working after that. The data comes back in a different format, though, so check
+> [CHANGELOG.md](CHANGELOG.md) before you upgrade.
+
+## Getting started
+
+You'll need your server's API key. The server owner can find it in **Server Management >
+External > API Key**, and the server needs the **API package**.
 
 ```python
 import os
@@ -19,31 +25,32 @@ from oxrpy import OxfordAPI
 
 api = OxfordAPI(os.environ["OXFD_SERVER_KEY"])
 
-# Everything you need in ONE request (the API allows 1 of these a second per key)
+# Grab a few sections in one request
 data = api.get_server_data("Players", "Vehicles", "Robberies")
 print(data["Server"]["Name"], "online:", data.online)
-for player in data["Players"] or []:          # live sections are None while offline
+
+for player in data["Players"] or []:   # None if the server's offline
     print(player["Username"], player["Team"], player["Location"])
 
-# Or one section at a time
+# Or just ask for one thing
 players = api.get_players()
 staff = api.get_staff()
 
-# Run a command and check how it went (a 200 can still be a failed command)
+# Run a command
 result = api.run_command("announce Server restart in 5 minutes")
 if result["Status"] == "Failed":
     print(result["Code"], result["Message"])
 ```
 
-Your server key is in **Server Management > External > API Key**, and your server needs the
-**API package**. A server key gives full control of the server. Keep it on your own machine or
-bot, never in website or app code people can read.
+Keep your key private. Anyone who has it can run commands on your server, change its settings
+and ban people. Keep it on your own machine or bot, and never put it in website code that
+people can see.
 
 ## Reading data
 
-`get_server_data(*sections, ...)` maps directly onto `GET /v1/server`. Name any sections (case
-doesn't matter). The top-level fields `Online`, `LastHeartbeat`, `NextHeartbeat`, `Cursor` and
-`Server` always come back.
+`get_server_data()` lets you ask for any mix of sections in a single request. Section names
+aren't case-sensitive. You'll always get `Online`, `LastHeartbeat`, `NextHeartbeat`, `Cursor`
+and `Server` back too.
 
 | Kind | Sections |
 | --- | --- |
@@ -54,35 +61,37 @@ doesn't matter). The top-level fields `Online`, `LastHeartbeat`, `NextHeartbeat`
 ```python
 data = api.get_server_data(
     "Events", "KillLogs", "Shots",
-    since=cursor,           # only entries newer than a previous response's Cursor
-    limit=200,              # per log (max 500)
+    since=cursor,   # only entries newer than the Cursor from a previous response
+    limit=200,      # max entries per log (up to 500)
 )
 
-bans = api.get_bans(limit=100, offset=0)       # {"Total", "Offset", "List"}
-for ban in api.iter_bans():                    # every page
+bans = api.get_bans(limit=100, offset=0)    # one page: {"Total", "Offset", "List"}
+for ban in api.iter_bans():                 # or every ban, page by page
     ...
 
 audit = api.get_audit(category=["Moderation", "Staff"], user="amy_hx", limit=50)
 older = api.get_audit(before=audit["Next"])
 
-# Skip work when nothing changed
+# Only download the data again if something's changed
 data = api.get_server_data("Players")
-again = api.get_server_data("Players", if_none_match=data.etag)   # None if unchanged
+again = api.get_server_data("Players", if_none_match=data.etag)   # None if nothing changed
 ```
 
-Single-section helpers: `get_server`, `is_online`, `get_players`, `get_tracks`, `get_vehicles`,
-`get_world`, `get_teams`, `get_queue`, `get_robberies`, `get_atms`, `get_incidents`,
-`get_staff`, `get_groups`, `get_bans`, `iter_bans`, `get_settings`, `get_catalogue`,
-`get_killlogs`, `get_modcalls`, `get_radiocalls`, `get_joinlogs`, `get_events`,
-`get_commandlogs`, `get_command_results`, `get_shots`, `get_audit`.
+There's also a helper for each section: `get_server`, `is_online`, `get_players`,
+`get_tracks`, `get_vehicles`, `get_world`, `get_teams`, `get_queue`, `get_robberies`,
+`get_atms`, `get_incidents`, `get_staff`, `get_groups`, `get_bans`, `iter_bans`,
+`get_settings`, `get_catalogue`, `get_killlogs`, `get_modcalls`, `get_radiocalls`,
+`get_joinlogs`, `get_events`, `get_commandlogs`, `get_command_results`, `get_shots` and
+`get_audit`.
 
-Each helper is one request. If you need several sections, `get_server_data` with all of them is
-far kinder to the rate limit.
+Each helper makes its own request, and you only get one of these a second with a server key.
+If you need a few sections at once, ask for them all in one `get_server_data()` call.
 
-## Following logs live
+## Following logs as they happen
 
-`follow()` handles `Since`/`Cursor` for you. It returns each entry once, oldest first, and
-times each request for just after the server's next heartbeat.
+`follow()` keeps checking the logs for you and only hands you entries you haven't seen yet,
+oldest first. It also waits until the server's next update before asking again, so you're not
+wasting requests.
 
 ```python
 for data, new in api.follow("Events", "KillLogs", "ModCalls", sections=["Players"]):
@@ -92,41 +101,46 @@ for data, new in api.follow("Events", "KillLogs", "ModCalls", sections=["Players
         print(f'{kill["KillerUsername"]} downed {kill["VictimUsername"]} with {kill["Weapon"]}')
 ```
 
-An entry that changes (a mod call resolved, a shot gaining its hit) comes again with a new `Seq`
-and the same `Id`, so key your storage by `Id`. Save `follower.cursor` to resume after a restart:
+When an entry changes, for example a mod call gets resolved or a shot gets its hit recorded,
+it shows up again with the same `Id`. If you're storing entries, use `Id` as the key so the new
+version replaces the old one.
+
+If your bot restarts, you can carry on from where you left off by saving `follower.cursor`:
 
 ```python
 follower = api.follow("Events", cursor=saved_cursor)
-data, new = follower.poll()        # one request, if you run your own loop
+data, new = follower.poll()      # one request, if you'd rather run your own loop
 saved_cursor = follower.cursor
 ```
 
-## Commands
+## Running commands
 
 ```python
-api.run_command(":ban m4tty_b Combat logging 7d")             # leading ':' optional
-api.run_command("kick dxrkrider Exploiting", check=True)      # raises CommandFailedError if it failed
+api.run_command(":ban m4tty_b Combat logging 7d")          # the ':' is optional
+api.run_command("kick dxrkrider Exploiting", check=True)   # raises CommandFailedError if it didn't work
 
-results = api.run_commands([                                  # up to 10, run in order, 1 request
+results = api.run_commands([                               # up to 10 at once, run in order
     "wanted m4tty_b 2",
     "pm m4tty_b You're wanted for robbery",
     "radio Police Suspect m4tty_b last seen on Cowley Rd",
 ])
 
-# Commands wait up to 8 s for a result; slower ones come back "Pending"
+# Commands wait up to 8 seconds for a result. If one takes longer, it comes back as "Pending".
 r = api.run_command("setting CustomVehicles [...]")
 if r["Status"] == "Pending":
-    r = api.wait_for_command(r["CommandId"])                  # lower-case status: succeeded / failed / no_result
+    r = api.wait_for_command(r["CommandId"])   # note: this one uses lower case, e.g. "succeeded"
 ```
 
-Result `Code`s: `OK`, `TARGET_NOT_FOUND`, `INVALID_ARGS`, `FORBIDDEN`, `PACKAGE_REQUIRED`,
-`RATE_LIMITED`, `OFFLINE`, `UNKNOWN_COMMAND`, `FAILED`. Every command is listed at
-[docs.oxfd.re](https://docs.oxfd.re/#commands).
+A command can come back without an error and still have failed, so always check `Status`.
+`Code` tells you why: `OK`, `TARGET_NOT_FOUND`, `INVALID_ARGS`, `FORBIDDEN`,
+`PACKAGE_REQUIRED`, `RATE_LIMITED`, `OFFLINE`, `UNKNOWN_COMMAND` or `FAILED`. Oxford's docs
+have the [full list of commands](https://docs.oxfd.re/#commands).
 
 ## App keys
 
-If you're building an app many servers use, Oxford Roleplay can give you an app key (`oxa_…`)
-with its own rate limits. Send it **as well as** the server key of the server you're acting for:
+If you're making something that lots of servers will use, you can ask Oxford Roleplay for an
+app key (it starts with `oxa_`). It gives your app its own rate limits. You still need the
+server key for whichever server you're talking to:
 
 ```python
 api = OxfordAPI(server_key_for_that_server, app_key=os.environ["OXFD_APP_KEY"])
@@ -134,36 +148,40 @@ api = OxfordAPI(server_key_for_that_server, app_key=os.environ["OXFD_APP_KEY"])
 
 ## Rate limits
 
-By default (`rate_limit="auto"`) oxrpy paces requests to the published limits:
+oxrpy spaces out your requests so you stay under Oxford's limits:
 
-| Key | `GET /v1/server` with sections | Other GETs | Commands |
+| Key | `get_server_data` and the helpers | Other requests | Commands |
 | --- | --- | --- | --- |
-| Server key | 1/s, burst 2 | 5/s, burst 15 | 1/s |
-| App key (standard tier) | 20/s, burst 40 (shared) | (shared) | 2/s, burst 5 |
+| Server key | 1 a second (bursts of 2) | 5 a second (bursts of 15) | 1 a second |
+| App key (standard) | 20 a second (bursts of 40), shared | shared with the first column | 2 a second (bursts of 5) |
 
-On a `429` it waits `Retry-After` and retries (`max_retries`, default 3). Use
-`rate_limit="none"` for a custom or unlimited app tier, or a number for the minimum seconds
-between requests. The game itself also runs at most **15 commands every 10 seconds** per server.
-Beyond that, commands fail with `Code: "RATE_LIMITED"`.
+If you do get rate limited, it waits as long as the API asks and then tries again, up to
+`max_retries` times (3 by default). If your app key has custom or unlimited limits, pass
+`rate_limit="none"` to turn this off, or a number of seconds to wait between requests.
+
+The game also has its own limit of 15 commands every 10 seconds per server. Go over it and the
+extra commands fail with `RATE_LIMITED`.
 
 ## Errors
 
 ```python
 from oxrpy import (
-    OxfordAPIError,        # base class: .status, .code, .message, .body
-    AuthenticationError,   # 401/403: bad key, no API package, bad/suspended app key
-    BadRequestError,       # 400: .valid_parameters lists what GET /v1/server accepts
-    NotFoundError,         # 404
-    RateLimitError,        # 429 after retries: .retry_after
-    ServerOfflineError,    # 503: command sent while the server is offline
-    CommandFailedError,    # run_command(..., check=True) and Status == "Failed": .result
+    OxfordAPIError,        # all the errors below are based on this: .status, .code, .message, .body
+    AuthenticationError,   # wrong key, no API package, or a bad or suspended app key
+    BadRequestError,       # a typo in a section name; .valid_parameters lists the right ones
+    NotFoundError,         # e.g. a command ID that doesn't exist (results are kept for 7 days)
+    RateLimitError,        # still rate limited after retrying; .retry_after says how long to wait
+    ServerOfflineError,    # you sent a command while the server was offline
+    CommandFailedError,    # from run_command(..., check=True); .result has the details
 )
 ```
 
-Being offline isn't an error when you read data: `data.online` is `False`, live sections are
-`None`, and logs, bans, staff and settings still answer.
+Reading data from an offline server doesn't raise an error. `data.online` is `False`, the live
+sections are `None`, and the logs, bans, staff and settings still work.
 
 ## API status
+
+Want to know if the API itself is up?
 
 ```python
 api.get_status()   # {"Status": "operational", "UptimeSeconds": ..., "LastHour": {...}, "Uptime": {...}}

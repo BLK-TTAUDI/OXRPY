@@ -1,6 +1,6 @@
 """oxrpy: a Python wrapper for the Oxford Response private server API (https://docs.oxfd.re)."""
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 from .client import (  # noqa: E402
     AUDIT_CATEGORIES,

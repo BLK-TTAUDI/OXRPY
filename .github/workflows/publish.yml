@@ -14,8 +14,8 @@ jobs:
         python-version: ["3.10", "3.12", "3.13"]
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[test]"
@@ -25,8 +25,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install build twine
@@ -37,7 +37,7 @@ jobs:
         run: |
           pkg=$(ls dist/*.tar.gz | sed -E 's/.*oxrpy-(.*)\.tar\.gz/\1/')
           test "v$pkg" = "${GITHUB_REF_NAME}" || { echo "Tag $GITHUB_REF_NAME != version $pkg"; exit 1; }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -53,7 +53,7 @@ jobs:
     permissions:
       id-token: write # PyPI Trusted Publishing: no API token stored anywhere
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
