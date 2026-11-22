@@ -1,308 +1,174 @@
 # oxrpy
-A Python wrapper for the Oxford Response API.
 
-## Installation
+A Python wrapper for the [Oxford Response private server API](https://docs.oxfd.re/).
 
-Install from PyPI:
 ```
 pip install oxrpy
 ```
 
-## Usage
+> **2.0 targets the current API.** The old per-section endpoints (`/v1/server/players`,
+> `/v1/server/vehicles`, …) stop working on **1 January 2027**. oxrpy 2.x only uses
+> `GET /v1/server` and `POST /v1/server/command`, so it keeps working after that date.
+> Upgrading from 1.x? See [CHANGELOG.md](CHANGELOG.md).
+
+## Quick start
+
 ```python
+import os
 from oxrpy import OxfordAPI
 
-# Initialize with your server key (server-id is no longer required)
-api = OxfordAPI(server_key="your_server_key", rate_limit="auto")
+api = OxfordAPI(os.environ["OXFD_SERVER_KEY"])
 
-# Use all methods directly
-server_info = api.get_server()
+# Everything you need in ONE request (the API allows 1 of these a second per key)
+data = api.get_server_data("Players", "Vehicles", "Robberies")
+print(data["Server"]["Name"], "online:", data.online)
+for player in data["Players"] or []:          # live sections are None while offline
+    print(player["Username"], player["Team"], player["Location"])
+
+# Or one section at a time
 players = api.get_players()
+staff = api.get_staff()
 
-# Or use grouped managers via properties
-servers = api.servers
-server_info = servers.get_server()
-players = servers.get_players()
-bans = servers.get_bans()
-
-logs = api.logs
-kill_logs = logs.get_killlogs()
-mod_calls = logs.get_modcalls()
-
-commands = api.commands
-result = commands.execute_command("announce Hello!")
+# Run a command and check how it went (a 200 can still be a failed command)
+result = api.run_command("announce Server restart in 5 minutes")
+if result["Status"] == "Failed":
+    print(result["Code"], result["Message"])
 ```
 
-### Advanced Configuration
+Your server key is in **Server Management > External > API Key**, and your server needs the
+**API package**. A server key gives full control of the server. Keep it on your own machine or
+bot, never in website or app code people can read.
+
+## Reading data
+
+`get_server_data(*sections, ...)` maps directly onto `GET /v1/server`. Name any sections (case
+doesn't matter). The top-level fields `Online`, `LastHeartbeat`, `NextHeartbeat`, `Cursor` and
+`Server` always come back.
+
+| Kind | Sections |
+| --- | --- |
+| Live | `Players`, `Tracks`, `Vehicles`, `World`, `Teams`, `Queue`, `Robberies`, `Atms`, `Incidents`, `Fires`, `Medical`, `Trees`, `TrafficLights`, `Doors`, `Radio`, `Jobs`, `Bounties`, `Economy`, `Trailers`, `Placeables`, `PlaceablesSummary` |
+| Server | `Staff`, `Groups`, `Bans`, `Settings`, `Catalogue` |
+| Logs | `KillLogs`, `ModCalls`, `RadioCalls`, `JoinLogs`, `Events`, `CommandLogs`, `CommandResults`, `Shots`, `Audit` |
+
 ```python
-# Default rate limiting (recommended for most users) - ~29 requests/second with burst capacity
-# Uses token bucket algorithm for smooth throttling and burst handling
-api = OxfordAPI(server_key="your_server_key")
-# or explicitly:
-api = OxfordAPI(server_key="your_server_key", rate_limit="auto")
-
-# For heavy command usage (execute_command), use stricter rate limiting
-api = OxfordAPI(server_key="your_server_key", rate_limit=1.0)
-
-# Disable rate limiting entirely (use with caution)
-api = OxfordAPI(server_key="your_server_key", rate_limit="none")
-
-# Custom rate limiting (specify seconds between requests)
-api = OxfordAPI(server_key="your_server_key", rate_limit=0.5)  # 0.5 seconds
-
-# Configure retry behavior for rate-limited requests
-api = OxfordAPI(
-    server_key="your_server_key", 
-    rate_limit="auto",
-    max_retries=5  # Retry up to 5 times on rate limit errors
+data = api.get_server_data(
+    "Events", "KillLogs", "Shots",
+    since=cursor,           # only entries newer than a previous response's Cursor
+    limit=200,              # per log (max 500)
 )
 
-# Legacy usage with server-id (still supported for backward compatibility)
-api = OxfordAPI(server_key="your_server_key", server_id="your_server_id")
+bans = api.get_bans(limit=100, offset=0)       # {"Total", "Offset", "List"}
+for ban in api.iter_bans():                    # every page
+    ...
+
+audit = api.get_audit(category=["Moderation", "Staff"], user="amy_hx", limit=50)
+older = api.get_audit(before=audit["Next"])
+
+# Skip work when nothing changed
+data = api.get_server_data("Players")
+again = api.get_server_data("Players", if_none_match=data.etag)   # None if unchanged
 ```
 
-You can also import the managers directly:
+Single-section helpers: `get_server`, `is_online`, `get_players`, `get_tracks`, `get_vehicles`,
+`get_world`, `get_teams`, `get_queue`, `get_robberies`, `get_atms`, `get_incidents`,
+`get_staff`, `get_groups`, `get_bans`, `iter_bans`, `get_settings`, `get_catalogue`,
+`get_killlogs`, `get_modcalls`, `get_radiocalls`, `get_joinlogs`, `get_events`,
+`get_commandlogs`, `get_command_results`, `get_shots`, `get_audit`.
+
+Each helper is one request. If you need several sections, `get_server_data` with all of them is
+far kinder to the rate limit.
+
+## Following logs live
+
+`follow()` handles `Since`/`Cursor` for you. It returns each entry once, oldest first, and
+times each request for just after the server's next heartbeat.
+
 ```python
-from oxrpy import OxfordAPI, Servers, Logs, Commands
-
-api = OxfordAPI(server_key="your_server_key", rate_limit="auto")
-
-servers = Servers(api)
-logs = Logs(api)
-commands = Commands(api)
-
-# Now use them
-server_info = servers.get_server()
-kill_logs = logs.get_killlogs()
-result = commands.execute_command("kick PlayerOne")
+for data, new in api.follow("Events", "KillLogs", "ModCalls", sections=["Players"]):
+    for event in new["Events"]:
+        print(event["Type"], event)
+    for kill in new["KillLogs"]:
+        print(f'{kill["KillerUsername"]} downed {kill["VictimUsername"]} with {kill["Weapon"]}')
 ```
 
-## Error Handling
+An entry that changes (a mod call resolved, a shot gaining its hit) comes again with a new `Seq`
+and the same `Id`, so key your storage by `Id`. Save `follower.cursor` to resume after a restart:
+
 ```python
-from oxrpy import OxfordAPI, OxfordAPIError, RateLimitError
-
-api = OxfordAPI(server_key="your_key")
-
-try:
-    server_info = api.get_server()
-    print("Server info:", server_info)
-except RateLimitError as e:
-    print(f"Rate limit exceeded: {e}")
-    # Handle rate limiting (e.g., wait and retry)
-except OxfordAPIError as e:
-    print(f"API Error: {e}")
+follower = api.follow("Events", cursor=saved_cursor)
+data, new = follower.poll()        # one request, if you run your own loop
+saved_cursor = follower.cursor
 ```
 
-## Features
-- **Advanced Rate Limiting**: Token bucket algorithm with burst capacity and automatic retries
-- **Configurable Retry Logic**: Exponential backoff for rate-limited requests
-- **Separate Command Limiting**: Stricter 1/sec limit for command execution endpoints
-- Comprehensive error handling with custom exceptions
-- Request timeouts
-- Logging support
-- Input validation
+## Commands
 
-## Supported Endpoints
+```python
+api.run_command(":ban m4tty_b Combat logging 7d")             # leading ':' optional
+api.run_command("kick dxrkrider Exploiting", check=True)      # raises CommandFailedError if it failed
 
-- `get_server()`: Returns general server information.
-- `get_players()`: Returns list of current players.
-- `get_queue()`: Returns the reserved server queue.
-- `get_bans()`: Returns active bans.
-- `get_killlogs()`: Returns recent kill logs (max 100 entries).
-- `get_commandlogs()`: Returns recent command execution logs.
-- `get_joinlogs()`: Returns recent player join/leave logs.
-- `get_modcalls()`: Returns recent moderator call requests.
-- `get_vehicles()`: Returns vehicles currently spawned.
-- `execute_command(command)`: Executes a permitted command (e.g., "announce Hello!").
-`get_robberies()`: Returns the current status of all robbery locations (Name, Alarm, Available).
-- `get_radiocalls()`: Returns recent radio calls (last 100).
+results = api.run_commands([                                  # up to 10, run in order, 1 request
+    "wanted m4tty_b 2",
+    "pm m4tty_b You're wanted for robbery",
+    "radio Police Suspect m4tty_b last seen on Cowley Rd",
+])
 
-## API Endpoints
-get_server(): Returns general server information.
-Example response:
-```json
-{
-  "Name": "Oxford Roleplay",
-  "StyledName": "Oxford RP",
-  "Description": "UK emergency roleplay server",
-  "Tags": ["UK", "RP"],
-  "ThemeColour": "#ffffff",
-  "OwnerId": 123456789,
-  "CurrentPlayers": 18,
-  "MaxPlayers": 32,
-  "JoinCode": "OXFD-ABCD",
-  "CreatedAt": 1700000000,
-  "Packages": []
-}
+# Commands wait up to 8 s for a result; slower ones come back "Pending"
+r = api.run_command("setting CustomVehicles [...]")
+if r["Status"] == "Pending":
+    r = api.wait_for_command(r["CommandId"])                  # lower-case status: succeeded / failed / no_result
 ```
 
-get_players(): Returns list of current players.
-Example response:
-```json
-[
-  {
-    "Username": "PlayerOne",
-    "DisplayName": "PlayerOne",
-    "UserId": 12345,
-    "Team": "Civilian",
-    "WantedLevel": 0,
-    "Permission": "Admin",
-    "Callsign": "A12",
-    "Location": "Near Oxford City Centre"
-  }
-]
+Result `Code`s: `OK`, `TARGET_NOT_FOUND`, `INVALID_ARGS`, `FORBIDDEN`, `PACKAGE_REQUIRED`,
+`RATE_LIMITED`, `OFFLINE`, `UNKNOWN_COMMAND`, `FAILED`. Every command is listed at
+[docs.oxfd.re](https://docs.oxfd.re/#commands).
+
+## App keys
+
+If you're building an app many servers use, Oxford Roleplay can give you an app key (`oxa_…`)
+with its own rate limits. Send it **as well as** the server key of the server you're acting for:
+
+```python
+api = OxfordAPI(server_key_for_that_server, app_key=os.environ["OXFD_APP_KEY"])
 ```
 
-get_queue(): Returns the reserved server queue.
-Example response:
-```json
-{
-  "total": 2,
-  "users": [12345, 67890]
-}
+## Rate limits
+
+By default (`rate_limit="auto"`) oxrpy paces requests to the published limits:
+
+| Key | `GET /v1/server` with sections | Other GETs | Commands |
+| --- | --- | --- | --- |
+| Server key | 1/s, burst 2 | 5/s, burst 15 | 1/s |
+| App key (standard tier) | 20/s, burst 40 (shared) | (shared) | 2/s, burst 5 |
+
+On a `429` it waits `Retry-After` and retries (`max_retries`, default 3). Use
+`rate_limit="none"` for a custom or unlimited app tier, or a number for the minimum seconds
+between requests. The game itself also runs at most **15 commands every 10 seconds** per server.
+Beyond that, commands fail with `Code: "RATE_LIMITED"`.
+
+## Errors
+
+```python
+from oxrpy import (
+    OxfordAPIError,        # base class: .status, .code, .message, .body
+    AuthenticationError,   # 401/403: bad key, no API package, bad/suspended app key
+    BadRequestError,       # 400: .valid_parameters lists what GET /v1/server accepts
+    NotFoundError,         # 404
+    RateLimitError,        # 429 after retries: .retry_after
+    ServerOfflineError,    # 503: command sent while the server is offline
+    CommandFailedError,    # run_command(..., check=True) and Status == "Failed": .result
+)
 ```
 
-get_bans(): Returns active bans.
-Example response:
-```json
-[
-  {
-    "UserId": 12345,
-    "Username": "BannedUser",
-    "Reason": "Fail RP",
-    "BannedBy": "API",
-    "BannedById": 2,
-    "Expiry": 1701000000
-  }
-]
+Being offline isn't an error when you read data: `data.online` is `False`, live sections are
+`None`, and logs, bans, staff and settings still answer.
+
+## API status
+
+```python
+api.get_status()   # {"Status": "operational", "UptimeSeconds": ..., "LastHour": {...}, "Uptime": {...}}
 ```
 
-get_killlogs(): Returns recent kill logs (maximum 100 entries).
-Example response:
-```json
-[
-  {
-    "Timestamp": 1700000100,
-    "KillerUserId": 123,
-    "KillerUsername": "OfficerA",
-    "VictimUserId": 456,
-    "VictimUsername": "SuspectB",
-    "Distance": 42,
-    "Weapon": "Taser"
-  }
-]
-```
+## License
 
-get_commandlogs(): Returns recent command execution logs.
-Example response:
-```json
-[
-  {
-    "Timestamp": 1700000200,
-    "UserId": 789,
-    "Username": "AdminUser",
-    "Command": "kick",
-    "Args": ["PlayerOne"]
-  }
-]
-```
-
-get_joinlogs(): Returns recent player join/leave logs.
-Example response:
-```json
-[
-  {
-    "Timestamp": 1700000250,
-    "UserId": 12345,
-    "Username": "PlayerOne",
-    "Action": "joined"
-  },
-  {
-    "Timestamp": 1700000260,
-    "UserId": 67890,
-    "Username": "PlayerTwo",
-    "Action": "left"
-  }
-]
-```
-
-get_modcalls(): Returns recent moderator call requests.
-Example response:
-```json
-[
-  {
-    "Timestamp": 1700000300,
-    "CallerUserId": 123,
-    "CallerUsername": "PlayerOne",
-    "CallerDisplayName": "Player One",
-    "CaseId": "CASE-001",
-    "Responders": [
-      {
-        "UserId": 789,
-        "Username": "ModeratorA"
-      }
-    ]
-  }
-]
-```
-
-get_vehicles(): Returns vehicles currently spawned in the server.
-Example response:
-```json
-[
-  {
-    "OwnerUserId": 123,
-    "OwnerUsername": "PlayerOne",
-    "Registration": "OX12 ABC",
-    "Model": "Volvo XC90",
-    "Electric": false,
-    "ELS": true,
-    "ELS_Style": "UK"
-  }
-]
-```
-
-execute_command(command): Executes a permitted command on the server.
-Example response:
-```json
-{
-  "message": "Command sent successfully"
-}
-```
-
-get_robberies(): Returns the current status of all robbery locations.
-Example response:
-```json
-[
-  {
-    "Name": "Berry",
-    "Alarm": false,
-    "Available": true
-  },
-  {
-    "Name": "Jewellers",
-    "Alarm": true,
-    "Available": false
-  }
-]
-```
-
-get_radiocalls(): Returns recent radio calls.
-Example response:
-```json
-[
-  {
-    "Timestamp": 1765814500,
-    "AuthorUserId": 123456789,
-    "AuthorUsername": "Officer_Johnson",
-    "Location": "City Hall",
-    "Description": "Armed robbery in progress",
-    "Channel": "Police"
-  }
-]
-```
-
-
-
-
-
+Proprietary. See [LICENSE](LICENSE).

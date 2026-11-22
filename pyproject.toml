@@ -1,22 +1,39 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "oxrpy"
-version = "0.2.0"
-description = "Python wrapper for the Oxford Response API"
+dynamic = ["version"]
+description = "Python wrapper for the Oxford Response private server API"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.8"
+authors = [{ name = "BLK-TTAUDI" }]
+keywords = ["oxford response", "oxford roleplay", "roblox", "api", "wrapper"]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
-dependencies = [
-    "requests",
-]
+dependencies = ["requests>=2.25"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
 
 [project.urls]
 Homepage = "https://github.com/BLK-TTAUDI/OXRPY"
 Repository = "https://github.com/BLK-TTAUDI/OXRPY"
+Documentation = "https://docs.oxfd.re/"
+Changelog = "https://github.com/BLK-TTAUDI/OXRPY/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["oxrpy"]
+
+[tool.setuptools.dynamic]
+version = { attr = "oxrpy.__version__" }
+
+[tool.setuptools.package-data]
+oxrpy = ["py.typed"]
