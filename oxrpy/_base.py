@@ -13,6 +13,7 @@ import logging
 import time
 import warnings
 from http import HTTPStatus
+from urllib.parse import quote, urlsplit
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from . import __version__
@@ -87,14 +88,21 @@ def _section_name(name: str) -> str:
     return _SECTION_LOOKUP.get(name.lower(), name)
 
 
+#: The longest oxrpy will wait because the API said so, whatever ``Retry-After`` says.
+MAX_RETRY_WAIT = 60.0
+
+
 def _retry_after(headers: Mapping[str, str], body: Any) -> Optional[float]:
     value = headers.get("Retry-After")
     if value is None and isinstance(body, dict):
         value = body.get("RetryAfter", body.get("retryAfter"))
     try:
-        return float(value) if value is not None else None
+        seconds = float(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+    if seconds is None or seconds != seconds:  # NaN
+        return None
+    return min(max(seconds, 0.0), MAX_RETRY_WAIT)
 
 
 def _decode(content: bytes) -> Any:
@@ -110,6 +118,16 @@ def _check_result(result: Any) -> Any:
     if isinstance(result, dict) and str(result.get("Status", "")).lower() == "failed":
         raise CommandFailedError(result)
     return result
+
+
+def _check_base_url(base_url: str) -> str:
+    """Refuse to send the key anywhere but HTTPS (plain HTTP is allowed to this machine only,
+    for testing)."""
+    parts = urlsplit(base_url)
+    local = parts.hostname in ("localhost", "127.0.0.1", "::1")
+    if parts.scheme != "https" and not (parts.scheme == "http" and local):
+        raise ValueError(f"base_url must be an https:// URL, so your key is never sent unencrypted: {base_url!r}")
+    return base_url.rstrip("/")
 
 
 class _Spec:
@@ -181,7 +199,7 @@ class BaseClient(CommandHelpers):
         if max_retries < 0:
             raise ValueError("max_retries must be 0 or more")
 
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _check_base_url(base_url)
         self.timeout = timeout
         self.max_retries = max_retries
         self.has_app_key = bool(app_key)
@@ -254,6 +272,13 @@ class BaseClient(CommandHelpers):
     def _handle(self, spec: _Spec, status: int, headers: Mapping[str, str], body: Any) -> Any:
         if status == 304 and spec.server_data:
             return None
+        if 300 <= status < 400:
+            # Never followed: a redirect elsewhere would carry the server key with it.
+            raise OxfordAPIError(
+                f"The API answered with a redirect ({status}) to {headers.get('Location')!r}. "
+                "oxrpy doesn't follow redirects, so your key isn't sent anywhere else.",
+                status=status,
+            )
         if status >= 400:
             raise self._error(status, headers, body)
         if spec.server_data:
@@ -560,7 +585,7 @@ class BaseClient(CommandHelpers):
         """
         if not command_id:
             raise ValueError("command_id is required")
-        return self._call(_Spec("GET", f"/server/commands/{command_id}"))
+        return self._call(_Spec("GET", f"/server/commands/{quote(str(command_id), safe='')}"))
 
     # ------------------------------------------------------------------ staff and group sync
 

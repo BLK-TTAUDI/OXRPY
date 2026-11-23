@@ -1,0 +1,12 @@
+# Opens a pull request when a GitHub Action or Python dependency has an update, including
+# security fixes, so pinned versions don't go stale.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly

@@ -272,3 +272,15 @@ def test_readme_links_are_absolute():
 def test_tests_are_not_shipped_in_the_source_package():
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     assert "prune tests" in manifest
+
+
+def test_readme_sections_for_the_docs_site_are_intact():
+    """The docs site (a separate repo) pulls each guide page from a marked README section.
+    Every section that's started must be ended, once, in order."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    starts = re.findall(r"<!-- --8<-- \[start:([a-z-]+)\] -->", readme)
+    ends = re.findall(r"<!-- --8<-- \[end:([a-z-]+)\] -->", readme)
+    assert starts and starts == ends and len(set(starts)) == len(starts)
+    for needed in ("intro", "getting-started", "reading-data", "events", "commands", "async",
+                   "many-servers", "map", "cli", "examples"):
+        assert needed in starts

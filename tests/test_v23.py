@@ -259,7 +259,8 @@ def test_pool_save_dir(tmp_path):
             pool.stop()
 
         await asyncio.wait_for(pool.run_forever(save_dir=tmp_path), 5)
-        saved = json.loads((tmp_path / "guild_1.json").read_text())
+        [saved_file] = list(tmp_path.glob("guild_1-*.json"))
+        saved = json.loads(saved_file.read_text())
         assert saved["Cursor"] == 2
         await pool.aclose()
 

@@ -6,6 +6,10 @@ on:
     tags: ["v*"]
   pull_request:
 
+# Jobs only get read access unless they ask for more (only publish does, for PyPI).
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -14,8 +18,8 @@ jobs:
         python-version: ["3.10", "3.12", "3.13"]
       fail-fast: false
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[test]"
@@ -24,37 +28,19 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - run: pip install -e ".[test]" mypy
       - run: mypy oxrpy
 
-  docs:
-    # Builds the docs site so a broken page or docstring is caught. The built site is kept as a
-    # download on the run (Actions > the run > Artifacts) for uploading to the docs server.
-    runs-on: ubuntu-latest
-    env:
-      NO_MKDOCS_2_WARNING: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - run: pip install -e ".[docs]"
-      - run: mkdocs build --strict
-      - uses: actions/upload-artifact@v7
-        with:
-          name: docs-site
-          path: site/
-
   build:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - run: pip install build twine
@@ -65,7 +51,7 @@ jobs:
         run: |
           pkg=$(ls dist/*.tar.gz | sed -E 's/.*oxrpy-(.*)\.tar\.gz/\1/')
           test "v$pkg" = "${GITHUB_REF_NAME}" || { echo "Tag $GITHUB_REF_NAME != version $pkg"; exit 1; }
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
@@ -81,8 +67,8 @@ jobs:
     permissions:
       id-token: write # PyPI Trusted Publishing: no API token stored anywhere
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3

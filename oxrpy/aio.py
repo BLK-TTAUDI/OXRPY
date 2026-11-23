@@ -95,6 +95,7 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
                     json=spec.json,
                     headers=headers,
                     timeout=spec.timeout or self.timeout,
+                    follow_redirects=False,
                 )
             except httpx.HTTPError as exc:
                 delay = self._network_retry_delay(spec, attempt)

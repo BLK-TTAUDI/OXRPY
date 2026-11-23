@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.3.1
+
+A security release. Upgrading is recommended; nothing should break.
+
+### Security
+
+- **Redirects are never followed.** If anything answered with a redirect to another site, the
+  `server-key` header used to go with it, because `requests` only strips the standard
+  `Authorization` header. oxrpy now refuses redirects and raises an error instead. The async
+  client does the same, even if you pass it an httpx client set to follow redirects.
+- **Your own session is left alone.** Passing `session=` used to add your server key to that
+  session's default headers, so it went out with every other request you made with it. The key
+  is now sent with oxrpy's own requests only.
+- **HTTPS only.** `base_url` must be `https://` (plain `http://` is allowed for `localhost`,
+  for testing), so the key is never sent unencrypted.
+- **Needs requests 2.32.4 or newer**, which fixes CVE-2024-47081 (a credential leak), and
+  httpx 0.27 or newer for the async extra.
+- A `Retry-After` from the API can't make oxrpy wait more than a minute.
+- Command IDs are escaped in `get_command()`, so an ID taken from user input can't reach a
+  different API path.
+- `AsyncServerPool(save_dir=...)` gives every server its own file, even when two names look
+  alike once made safe for a file name (like `"a/b"` and `"a_b"`).
+
+### Other
+
+- The docs website has moved to its own repository, so this one only holds the wrapper. The
+  site is still built from this README, the changelog and the code's docstrings, so they stay
+  the place to edit the docs' content.
+- GitHub Actions are pinned to exact versions, jobs get read-only access by default, and
+  Dependabot proposes updates.
+
 ## 2.3.0
 
 Nothing in this release should break existing code.
@@ -17,8 +48,8 @@ Nothing in this release should break existing code.
   - A server whose key stops working is dropped and reported, and the rest carry on.
   - You can add and remove servers while it runs.
   - `each()` and `run_command_on_all()` do something on every server at once.
-- **Docs site.** Full guides and a reference for every method, built with MkDocs
-  (`pip install "oxrpy[docs]"`, then `mkdocs serve`).
+- **Docs site.** Full guides and a reference for every method, built from this README, the
+  changelog and the docstrings.
 
 ### Fixed
 

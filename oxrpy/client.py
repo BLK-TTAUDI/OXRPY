@@ -74,8 +74,9 @@ class OxfordAPI(SyncSignatures, BaseClient):
         super().__init__(server_key, app_key=app_key, timeout=timeout, rate_limit=rate_limit,
                          max_retries=max_retries, base_url=base_url, global_key=global_key,
                          server_id=server_id)
+        # The key is sent with each request rather than set on the session, so a session you
+        # pass in (and use for other sites) never carries it anywhere else.
         self.session = session or requests.Session()
-        self.session.headers.update(self.headers)
         self._stop = threading.Event()
         self._command_window = CommandWindow()
 
@@ -87,14 +88,18 @@ class OxfordAPI(SyncSignatures, BaseClient):
         while True:
             if bucket is not None and not bucket.acquire(timeout=60):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
+            headers = dict(self.headers)
+            if spec.headers:
+                headers.update(spec.headers)
             try:
                 response = self.session.request(
                     spec.method,
                     self._url(spec),
                     params=spec.params,
                     json=spec.json,
-                    headers=spec.headers,
+                    headers=headers,
                     timeout=spec.timeout or self.timeout,
+                    allow_redirects=False,
                 )
             except requests.RequestException as exc:
                 delay = self._network_retry_delay(spec, attempt)

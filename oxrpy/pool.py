@@ -25,6 +25,7 @@ Needs ``pip install "oxrpy[async]"``.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import logging
 import re
@@ -46,7 +47,12 @@ IP_REQUESTS_PER_SECOND = 30
 
 
 def _file_name(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", name) or "server"
+    """A safe file name for a server's saved position. Names that had to be changed get a short
+    hash added, so two servers (``"a/b"`` and ``"a_b"``) never share a file."""
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", name)[:80] or "server"
+    if safe != name:
+        safe += "-" + hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    return safe
 
 
 class AsyncServerPool:
