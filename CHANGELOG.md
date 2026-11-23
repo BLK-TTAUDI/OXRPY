@@ -25,6 +25,7 @@ A security release. Upgrading is recommended; nothing should break.
 
 ### Other
 
+- The docs are now at **https://oxrpy.org**, the package's "Documentation" link on PyPI.
 - The docs website has moved to its own repository, so this one only holds the wrapper. The
   site is still built from this README, the changelog and the code's docstrings, so they stay
   the place to edit the docs' content.

@@ -30,7 +30,8 @@ oxrpy = "oxrpy.__main__:main"
 [project.urls]
 Homepage = "https://github.com/BLK-TTAUDI/OXRPY"
 Repository = "https://github.com/BLK-TTAUDI/OXRPY"
-Documentation = "https://docs.oxfd.re/"
+Documentation = "https://oxrpy.org/"
+"Oxford API docs" = "https://docs.oxfd.re/"
 Changelog = "https://github.com/BLK-TTAUDI/OXRPY/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
