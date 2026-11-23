@@ -1,0 +1,233 @@
+"""The asyncio client, for discord.py and other async code. Needs ``pip install oxrpy[async]``.
+
+Every method is the same as :class:`~oxrpy.OxfordAPI`'s, but you ``await`` it::
+
+    from oxrpy import AsyncOxfordAPI
+
+    async with AsyncOxfordAPI(key) as api:
+        players = await api.get_players()
+        await api.kick("dxrkrider", "Exploiting")
+"""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+import time
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Sequence, Tuple
+
+from ._base import BaseClient, ServerData, _decode, _Spec, logger
+from .errors import OxfordAPIError, RateLimitError
+from .events import ordered_entries
+from .follower import _FollowerBase
+from .ratelimit import AsyncTokenBucket
+
+try:
+    import httpx
+except ImportError:  # pragma: no cover - checked when the client is created
+    httpx = None  # type: ignore[assignment]
+
+
+class AsyncOxfordAPI(BaseClient):
+    """Async client for the Oxford Response private server API. Takes the same arguments as
+    :class:`~oxrpy.OxfordAPI`, except ``client`` (your own ``httpx.AsyncClient``) in place
+    of ``session``.
+
+    Use it with ``async with``, or call ``await api.aclose()`` when you're done.
+    """
+
+    _bucket_class = AsyncTokenBucket
+
+    def __init__(self, server_key: Optional[str] = None, *, client: Any = None, **kwargs: Any) -> None:
+        if httpx is None:
+            raise ImportError("AsyncOxfordAPI needs httpx: pip install \"oxrpy[async]\"")
+        super().__init__(server_key, **kwargs)
+        self._owns_client = client is None
+        self.client = client if client is not None else httpx.AsyncClient()
+        self._stop = asyncio.Event()
+
+    # ------------------------------------------------------------------ transport
+
+    async def _execute(self, spec: _Spec) -> Any:
+        bucket = self._limiters.get(spec.limiter)
+        headers = dict(self.headers)
+        if spec.headers:
+            headers.update(spec.headers)
+        attempt = 0
+        while True:
+            if bucket is not None and not await bucket.acquire(timeout=60):
+                raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
+            try:
+                response = await self.client.request(
+                    spec.method,
+                    self._url(spec),
+                    params=spec.params,
+                    json=spec.json,
+                    headers=headers,
+                    timeout=spec.timeout or self.timeout,
+                )
+            except httpx.HTTPError as exc:
+                delay = self._network_retry_delay(spec, attempt)
+                if delay is None:
+                    raise self._network_error(spec, exc, isinstance(exc, httpx.TimeoutException)) from exc
+                attempt += 1
+                await asyncio.sleep(delay)
+                continue
+
+            body = _decode(response.content)
+            delay = self._response_retry_delay(spec, response.status_code, response.headers, body, attempt)
+            if delay is not None:
+                attempt += 1
+                if response.status_code == 429:
+                    if bucket is not None:
+                        bucket.drain()
+                    logger.warning("Rate limited on %s %s, retrying in %.1fs", spec.method, spec.path, delay)
+                await asyncio.sleep(delay)
+                continue
+            logger.debug("%s %s -> %s", spec.method, spec.path, response.status_code)
+            return self._handle(spec, response.status_code, response.headers, body)
+
+    def _call(self, spec: _Spec, transform: Optional[Callable[[Any], Any]] = None) -> Any:
+        async def run() -> Any:
+            value = await self._execute(spec)
+            return transform(value) if transform is not None else value
+
+        return run()
+
+    # ------------------------------------------------------------------ loops
+
+    async def iter_bans(self, page_size: int = 1000) -> AsyncIterator[dict]:
+        """``async for ban in api.iter_bans():`` every ban, fetching pages as needed."""
+        offset = 0
+        while True:
+            page = await self.get_bans(limit=page_size, offset=offset) or {}
+            bans = page.get("List") or []
+            for ban in bans:
+                yield ban
+            offset += len(bans)
+            if not bans or offset >= (page.get("Total") or 0):
+                return
+
+    async def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> dict:
+        """Poll :meth:`get_command` until it's no longer ``pending`` (gives up after ``timeout``)."""
+        deadline = time.monotonic() + timeout
+        while True:
+            result = await self.get_command(command_id)
+            if str(result.get("Status", "")).lower() != "pending" or time.monotonic() >= deadline:
+                return result
+            await asyncio.sleep(interval)
+
+    def follow(self, *logs: str, sections: Sequence[str] = (), limit: Optional[int] = None,
+               cursor: Optional[int] = None) -> "AsyncLogFollower":
+        """An :class:`AsyncLogFollower`: ``async for data, new in api.follow("Events"):``"""
+        return AsyncLogFollower(self, logs or ("Events",), sections=sections, limit=limit, cursor=cursor)
+
+    async def run_forever(
+        self,
+        *,
+        sections: Sequence[str] = (),
+        limit: Optional[int] = None,
+        cursor: Optional[int] = None,
+        skip_existing: bool = True,
+    ) -> None:
+        """Poll and call the handlers registered with :meth:`on` until :meth:`stop` (or the task
+        is cancelled). Handlers can be plain functions or ``async def``. In discord.py, start it
+        from ``setup_hook`` with ``asyncio.create_task(api.run_forever())``.
+
+        Same behaviour as :meth:`OxfordAPI.run_forever`.
+        """
+        if not self._handlers:
+            raise ValueError("No handlers registered: use @api.on('Kill') (or another event) first")
+        follower = AsyncLogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
+                                    cursor=cursor)
+        skip = skip_existing and cursor is None
+        self._stop.clear()
+        async for data, new in follower.iter(stop=self._stop, on_error=self._dispatch_error):
+            if not skip:
+                for log, entry in ordered_entries(new):
+                    for fn in self._handlers.for_entry(log, entry):
+                        await self._safely(fn, entry)
+            skip = False
+            for fn in self._handlers.get("poll"):
+                await self._safely(fn, data)
+        self.cursor = follower.cursor
+
+    def stop(self) -> None:
+        """Make :meth:`run_forever` return after the current poll."""
+        self._stop.set()
+
+    async def _safely(self, fn: Callable[..., Any], arg: Any) -> None:
+        try:
+            result = fn(arg)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:  # noqa: BLE001 - one bad handler shouldn't stop the bot
+            logger.exception("Handler %r raised", getattr(fn, "__name__", fn))
+
+    async def _dispatch_error(self, exc: OxfordAPIError) -> None:
+        for fn in self._handlers.get("error"):
+            await self._safely(fn, exc)
+
+    # ------------------------------------------------------------------ lifecycle
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
+
+    async def __aenter__(self) -> "AsyncOxfordAPI":
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.aclose()
+
+
+class AsyncLogFollower(_FollowerBase):
+    """The async version of :class:`~oxrpy.LogFollower`::
+
+    async for data, new in api.follow("Events", "KillLogs"):
+        ...
+    """
+
+    api: AsyncOxfordAPI
+
+    async def poll(self) -> Tuple[ServerData, Dict[str, List[dict]]]:
+        """Make one request. Errors are raised, not retried."""
+        names, kwargs = self._request_args()
+        data = await self.api.get_server_data(*names, **kwargs)
+        assert data is not None
+        return data, self._process(data)
+
+    async def iter(
+        self,
+        *,
+        retry: bool = True,
+        stop: Optional[asyncio.Event] = None,
+        on_error: Optional[Callable[[OxfordAPIError], Any]] = None,
+    ) -> AsyncIterator[Tuple[ServerData, Dict[str, List[dict]]]]:
+        """Poll until ``stop`` is set (or forever). With ``retry=False`` the first error is raised."""
+
+        async def wait(seconds: float) -> None:
+            if stop is None:
+                await asyncio.sleep(seconds)
+                return
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=seconds)
+            except asyncio.TimeoutError:
+                pass
+
+        while stop is None or not stop.is_set():
+            try:
+                data, new = await self.poll()
+            except OxfordAPIError as exc:
+                delay = self._after_error(exc, retry)
+                if on_error is not None:
+                    result = on_error(exc)
+                    if inspect.isawaitable(result):
+                        await result
+                await wait(delay)
+                continue
+            yield data, new
+            await wait(self.next_delay(data))
+
+    def __aiter__(self) -> AsyncIterator[Tuple[ServerData, Dict[str, List[dict]]]]:
+        return self.iter()

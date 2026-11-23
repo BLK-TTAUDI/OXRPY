@@ -21,7 +21,8 @@ classifiers = [
 dependencies = ["requests>=2.25"]
 
 [project.optional-dependencies]
-test = ["pytest>=7"]
+async = ["httpx>=0.24"]
+test = ["pytest>=7", "httpx>=0.24"]
 
 [project.urls]
 Homepage = "https://github.com/BLK-TTAUDI/OXRPY"

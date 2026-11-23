@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.1.0
+
+Nothing in this release should break code written for 2.0.
+
+### New
+
+- **Async client.** `AsyncOxfordAPI` has every method `OxfordAPI` has, but you `await`
+  them, so discord.py bots and other async code don't freeze while waiting for the API. Install
+  it with `pip install "oxrpy[async]"`, which adds `httpx`.
+- **Event handlers.** Register functions with `@api.on("Kill")`, `@api.on("Join", "Leave")`,
+  `@api.on("SpeedCamera")` and so on, then call `api.run_forever()`. oxrpy works out which
+  logs to ask for. Entries arrive oldest first, and old entries are skipped on startup. If a
+  handler raises, the error is logged and the bot keeps going. There are also `"poll"` and
+  `"error"` handlers, and `api.stop()`.
+- **Command helpers.** There's a method for every command, such as `api.kick(...)`,
+  `api.ban(user, reason, "7d")`, `api.set_team(...)`, `api.create_incident(...)` and
+  `api.set_setting(...)`. They check arguments before sending, so typos fail straight away,
+  and they raise `CommandFailedError` if the command didn't work (pass `check=False` to turn
+  that off). `format_duration()` turns a `timedelta` or seconds into a ban duration.
+
+### Changed
+
+- `follow()` no longer stops when a request fails. It waits and tries again, waiting longer
+  after each failure in a row (up to a minute), and only stops for errors that waiting won't
+  fix, like a wrong key. Use `follower.iter(retry=False)` for the old behaviour.
+
 ## 2.0.1
 
 - Rewrote the README to be easier to read. No code changes.

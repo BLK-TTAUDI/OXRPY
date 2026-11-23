@@ -7,6 +7,12 @@ read what's happening on your server and run commands on it from your own bot, w
 pip install oxrpy
 ```
 
+If you're writing async code, like a discord.py bot, install the async extra instead:
+
+```
+pip install "oxrpy[async]"
+```
+
 You'll need Python 3.10 or newer.
 
 > **Upgrading from 1.x?** Oxford is switching off the old endpoints (`/v1/server/players`,
@@ -113,6 +119,53 @@ data, new = follower.poll()      # one request, if you'd rather run your own loo
 saved_cursor = follower.cursor
 ```
 
+The loop keeps going if the internet drops, you get rate limited or the API has a bad moment.
+It waits a bit longer after each failure in a row (up to a minute) and logs a warning. It only
+stops for problems that waiting won't fix, like a wrong API key, and raises those.
+
+## Reacting to events
+
+If you just want to run some code whenever something happens in game, register a handler with
+`@api.on(...)` and call `run_forever()`:
+
+```python
+from oxrpy import OxfordAPI
+
+api = OxfordAPI(key)
+
+@api.on("Kill")
+def on_kill(kill):
+    print(f'{kill["KillerUsername"]} downed {kill["VictimUsername"]}')
+
+@api.on("Join", "Leave")
+def on_join_or_leave(entry):
+    print(entry["Username"], entry["Type"])
+
+@api.on("SpeedCamera")
+def on_speeding(event):
+    if event["SpeedMph"] > event["Limit"] + 30:
+        api.pm(event["UserId"], "Slow down!")
+
+api.run_forever()
+```
+
+You can listen for:
+
+- Any entry type: `Kill`, `ModCall`, `RadioCall`, `Join`, `Leave`, `Command`,
+  `CommandResult`, `Shot`, or any of the game events, such as `Downed`, `Jailed`,
+  `RobberyStarted`, `SpeedCamera` or `IncidentOpened`. Oxford's docs list
+  [every event](https://docs.oxfd.re/#events).
+- A whole log, such as `"KillLogs"` or `"Events"`, to get everything in it.
+- `"poll"`, which gets the whole response after every request. Pass
+  `run_forever(sections=["Players"])` to have live data in it too.
+- `"error"`, which gets the exception when a request fails and is about to be retried.
+
+oxrpy works out which logs to ask for from your handlers. Entries arrive oldest first. By
+default, `run_forever()` ignores whatever was already in the logs when it started, so you don't
+get a flood of old kills on startup. Pass `skip_existing=False` if you want them. If a handler
+raises, the error is logged and the bot carries on. Call `api.stop()` from a handler, or from
+another thread, to make `run_forever()` return.
+
 ## Running commands
 
 ```python
@@ -135,6 +188,87 @@ A command can come back without an error and still have failed, so always check 
 `Code` tells you why: `OK`, `TARGET_NOT_FOUND`, `INVALID_ARGS`, `FORBIDDEN`,
 `PACKAGE_REQUIRED`, `RATE_LIMITED`, `OFFLINE`, `UNKNOWN_COMMAND` or `FAILED`. Oxford's docs
 have the [full list of commands](https://docs.oxfd.re/#commands).
+
+### Command helpers
+
+There's also a method for each command, so you don't have to build the text yourself:
+
+```python
+api.kick("dxrkrider", "Exploiting")
+api.ban("m4tty_b", "Combat logging", "7d")          # or timedelta(days=7), or leave it out for permanent
+api.wanted("team:Civilian", 0)
+api.pm("all", "Server restart in 5 minutes")
+api.set_team(81234401, "Police")
+api.set_weather("thunderstorm")
+api.create_incident("Police", 1, 415, 1238, "Alarm at Oxford Bank")
+api.set_setting("TeamLimits", {"Police": 8, "Fire": 4})   # sent as JSON for you
+```
+
+They check your arguments before sending anything. A ban duration like `"7 days"`, a team
+that doesn't exist or a wanted level of 5 raises `ValueError` straight away. Unlike
+`run_command()`, the helpers raise `CommandFailedError` if the server says the command didn't
+work. Pass `check=False` if you'd rather get the result back and check it yourself.
+
+The full set:
+
+- **Moderation:** `kick`, `ban`, `unban`, `jail`, `release`, `wanted`, `pm` and
+  `resolve_modcall`.
+- **Staff:** `rank`, `unrank`, `group_add` and `group_remove`.
+- **Players and vehicles:** `set_team`, `respawn`, `revive`, `teleport`,
+  `teleport_to_vehicle`, `set_invincible`, `give`, `despawn_vehicle`, `remove_vehicle`,
+  `spawn_vehicle`, `repair` and `refuel`.
+- **World and messages:** `set_time`, `lock_time`, `set_weather`, `lock_weather`,
+  `announce`, `team_announce`, `alert`, `set_message`, `remove_message`, `countdown` and
+  `speed_limit`.
+- **Control room:** `create_incident`, `assign_incident`, `close_incident`, `radio`,
+  `start_callout`, `ambulance_callout`, `list_callouts` and `stop_fires`.
+- **Server:** `set_setting`, `new_join_code`, `queue_remove`, `queue_front`,
+  `clear_placeables` and `shutdown`.
+
+## Async (discord.py and friends)
+
+`AsyncOxfordAPI` has all the same methods, but you `await` them, so your bot doesn't freeze
+while it waits for the API. It needs `pip install "oxrpy[async]"`.
+
+```python
+import asyncio
+import discord
+from oxrpy import AsyncOxfordAPI
+
+api = AsyncOxfordAPI(OXFD_SERVER_KEY)
+
+class Bot(discord.Client):
+    async def setup_hook(self):
+        asyncio.create_task(api.run_forever())     # handlers run alongside the bot
+
+bot = Bot(intents=discord.Intents.default())
+
+@api.on("Kill")
+async def on_kill(kill):                           # handlers can be async or normal functions
+    channel = bot.get_channel(KILL_FEED_CHANNEL_ID)
+    await channel.send(f'{kill["KillerUsername"]} downed {kill["VictimUsername"]}')
+
+@bot.event
+async def on_message(message):
+    if message.content == "!players":
+        players = await api.get_players() or []
+        await message.channel.send(f"{len(players)} players online")
+
+bot.run(DISCORD_TOKEN)
+```
+
+Following logs works with `async for`:
+
+```python
+async for data, new in api.follow("Events"):
+    ...
+
+async for ban in api.iter_bans():
+    ...
+```
+
+Use `async with AsyncOxfordAPI(key) as api:`, or call `await api.aclose()` when you're done,
+to close the connection cleanly.
 
 ## App keys
 

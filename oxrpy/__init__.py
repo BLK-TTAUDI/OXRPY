@@ -1,18 +1,20 @@
 """oxrpy: a Python wrapper for the Oxford Response private server API (https://docs.oxfd.re)."""
 
-__version__ = "2.0.1"
+__version__ = "2.1.0"
 
-from .client import (  # noqa: E402
+from ._base import (  # noqa: E402
     AUDIT_CATEGORIES,
     BASE_URL,
     LOG_SECTIONS,
     SECTIONS,
     Commands,
     Logs,
-    OxfordAPI,
     ServerData,
     Servers,
 )
+from .aio import AsyncLogFollower, AsyncOxfordAPI  # noqa: E402
+from .client import OxfordAPI  # noqa: E402
+from .commands import TEAMS, format_duration  # noqa: E402
 from .errors import (  # noqa: E402
     AuthenticationError,
     BadRequestError,
@@ -24,16 +26,21 @@ from .errors import (  # noqa: E402
     ServerOfflineError,
 )
 from .follower import LogFollower  # noqa: E402
-from .ratelimit import TokenBucket  # noqa: E402
+from .ratelimit import AsyncTokenBucket, TokenBucket  # noqa: E402
 
 __all__ = [
     "OxfordAPI",
+    "AsyncOxfordAPI",
     "ServerData",
     "LogFollower",
+    "AsyncLogFollower",
     "Servers",
     "Logs",
     "Commands",
     "TokenBucket",
+    "AsyncTokenBucket",
+    "format_duration",
+    "TEAMS",
     "OxfordAPIError",
     "AuthenticationError",
     "BadRequestError",
