@@ -1,0 +1,15 @@
+{
+  "Online": false,
+  "LastHeartbeat": 1793570000,
+  "NextHeartbeat": null,
+  "Cursor": 88412,
+  "Server": { "Name": "Thames Valley RP", "OwnerId": 81234001, "CurrentPlayers": 0, "MaxPlayers": 36, "StartedAt": 1793561200 },
+  "Players": null,
+  "Vehicles": null,
+  "KillLogs": [],
+  "Staff": {
+    "OwnerId": 81234001,
+    "Staff": [{ "UserId": 81234401, "Username": null, "RankId": "mod", "Rank": "Mod", "Online": false }],
+    "Ranks": [{ "Id": "mod", "Name": "Mod", "Priority": 10 }]
+  }
+}

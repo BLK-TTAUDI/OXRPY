@@ -2,3 +2,4 @@ prune tests
 prune examples
 prune .github
 prune scripts
+prune fixtures

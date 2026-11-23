@@ -1,0 +1,101 @@
+{
+  "about": "Shared expectations for oxrpy (Python) and oxrpy-js. Both test suites load this file and the responses next to it, so the two wrappers can't drift apart. The canonical copy lives in BLK-TTAUDI/OXRPY at fixtures/; oxrpy-js keeps an exact copy (checked in CI). Method names are given for both languages; args are JSON so both can use them.",
+
+  "commands": [
+    { "py": "kick", "js": "kick", "args": ["dxrkrider", "Exploiting"], "text": "kick dxrkrider Exploiting" },
+    { "py": "kick", "js": "kick", "args": [12345], "text": "kick 12345" },
+    { "py": "ban", "js": "ban", "args": ["m4tty_b", "Combat logging", "7d"], "text": "ban m4tty_b Combat logging 7d" },
+    { "py": "ban", "js": "ban", "args": ["m4tty_b", "Fail RP 2"], "text": "ban m4tty_b Fail RP 2 permanent" },
+    { "py": "ban", "js": "ban", "args": ["@m4tty_b"], "text": "ban m4tty_b" },
+    { "py": "ban", "js": "ban", "args": [99120344, null, 129600], "text": "ban 99120344 1d12h" },
+    { "py": "unban", "js": "unban", "args": ["m4tty_b"], "text": "unban m4tty_b" },
+    { "py": "jail", "js": "jail", "args": ["x", 120], "text": "jail x 120" },
+    { "py": "wanted", "js": "wanted", "args": ["team:Civilian", 0], "text": "wanted team:Civilian 0" },
+    { "py": "pm", "js": "pm", "args": ["all", "Server\nrestart  soon"], "text": "pm all Server restart soon" },
+    { "py": "resolve_modcall", "js": "resolveModcall", "args": [4821], "text": "modcall resolve 4821" },
+    { "py": "rank", "js": "rank", "args": ["amy_hx", "Senior Moderator"], "text": "rank amy_hx Senior Moderator" },
+    { "py": "group_add", "js": "groupAdd", "args": [2938475610, "Undercover Police"], "text": "group add 2938475610 Undercover Police" },
+    { "py": "set_team", "js": "setTeam", "args": ["x", "police"], "text": "team x Police" },
+    { "py": "set_invincible", "js": "setInvincible", "args": ["all", false], "text": "uninvincible all" },
+    { "py": "remove_vehicle", "js": "removeVehicle", "args": ["RJ75 FLK"], "text": "removevehicle RJ75FLK" },
+    { "py": "set_time", "js": "setTime", "args": [13.5], "text": "time 13.5" },
+    { "py": "set_weather", "js": "setWeather", "args": ["THUNDERSTORM"], "text": "weather thunderstorm" },
+    { "py": "lock_weather", "js": "lockWeather", "args": [], "text": "lockweather" },
+    { "py": "alert", "js": "alert", "args": ["Storm incoming", "red"], "text": "redalert Storm incoming" },
+    { "py": "speed_limit", "js": "speedLimit", "args": [null], "text": "speedlimit off" },
+    { "py": "speed_limit", "js": "speedLimit", "args": [60], "text": "speedlimit 60" },
+    { "py": "create_incident", "js": "createIncident", "args": ["ambulance", 2, -640, 1712.5, "Cyclist down on Abingdon Rd"], "text": "incident create Ambulance 2 -640 1712.5 Cyclist down on Abingdon Rd" },
+    { "py": "radio", "js": "radio", "args": ["Police", "Suspect last seen on Cowley Rd"], "text": "radio Police Suspect last seen on Cowley Rd" },
+    { "py": "respawn", "js": "respawn", "args": ["nonadmins"], "text": "load nonadmins" },
+    { "py": "teleport", "js": "teleport", "args": ["nonadmins", "Officer_Smith"], "text": "tp nonadmins Officer_Smith" },
+    { "py": "clear_placeables", "js": "clearPlaceables", "args": [], "text": "clearplaceables all" }
+  ],
+
+  "invalid_commands": [
+    { "py": "ban", "js": "ban", "args": ["x", "RDM", "7 days"] },
+    { "py": "ban", "js": "ban", "args": ["x", "RDM", "0m"] },
+    { "py": "ban", "js": "ban", "args": ["two words"] },
+    { "py": "jail", "js": "jail", "args": ["x", 5] },
+    { "py": "wanted", "js": "wanted", "args": ["x", 4] },
+    { "py": "set_team", "js": "setTeam", "args": ["x", "Swat"] },
+    { "py": "give", "js": "give", "args": ["x", "rocket"] },
+    { "py": "set_time", "js": "setTime", "args": [25] },
+    { "py": "speed_limit", "js": "speedLimit", "args": [300] },
+    { "py": "create_incident", "js": "createIncident", "args": ["Civilian", 1, 0, 0, "x"] },
+    { "py": "announce", "js": "announce", "args": ["   "] }
+  ],
+
+  "find_player": [
+    { "query": "KIERAN_RD", "user_id": 81234401, "why": "username, any case" },
+    { "query": "dark", "user_id": 99120344, "why": "display name" },
+    { "query": 99120344, "user_id": 99120344, "why": "user ID" },
+    { "query": "@dxrk", "user_id": 99120344, "why": "part of a name, @ ignored" },
+    { "query": "nobody", "user_id": null, "why": "no match" },
+    { "query": "kier", "ambiguous": ["kieran_rd", "kierstan"], "why": "two partial matches" }
+  ],
+
+  "find_vehicle": [
+    { "query": "ox24krd", "plate": "OX24 KRD", "why": "plate, spaces and case ignored" },
+    { "query": "dxrkrider", "plate": "RJ75 FLK", "why": "by owner name" },
+    { "query": 81234401, "plate": "OX24 KRD", "why": "by owner user ID" }
+  ],
+
+  "players_on_team": { "team": "police", "usernames": ["kieran_rd"] },
+  "staff_online": { "usernames": ["kieran_rd"] },
+
+  "dispatch": {
+    "about": "run_forever with handlers for Kill, Join, Leave and SpeedCamera, skipping the backlog: the first poll is server_full (skipped), the second adds these entries. Handlers must fire oldest first across logs.",
+    "second_poll": {
+      "Cursor": 88420,
+      "KillLogs": [{ "Seq": 88417, "Id": "k2", "Type": "Kill", "At": 1793578020, "KillerUsername": "kieran_rd", "VictimUsername": "spammer" }],
+      "JoinLogs": [
+        { "Seq": 88419, "Id": "j3", "Type": "Leave", "At": 1793578030, "Username": "spammer" },
+        { "Seq": 88414, "Id": "j2", "Type": "Join", "At": 1793578010, "Username": "newbie" }
+      ],
+      "Events": [{ "Seq": 88415, "Id": "e3", "Type": "SpeedCamera", "At": 1793578012, "SpeedMph": 61, "Limit": 30 }]
+    },
+    "order": ["Join:88414", "SpeedCamera:88415", "Kill:88417", "Leave:88419"]
+  },
+
+  "errors": [
+    { "status": 400, "body": { "message": "Unknown parameter: Player", "ValidParameters": ["Players", "Vehicles", "Since"] }, "type": "BadRequestError", "hint": "Did you mean 'Players'?" },
+    { "status": 401, "body": { "message": "Missing required header: server-key" }, "type": "AuthenticationError", "hint_contains": "server key" },
+    { "status": 403, "body": { "message": "Invalid API key" }, "type": "AuthenticationError", "hint_contains": "regenerated" },
+    { "status": 403, "body": { "message": "This server does not have the API package" }, "type": "AuthenticationError", "hint_contains": "API package" },
+    { "status": 404, "body": { "message": "No command with that id" }, "type": "NotFoundError", "hint_contains": "7 days" },
+    { "status": 410, "body": { "message": "This endpoint was removed on 1 January 2027. Use GET /v1/server." }, "type": "EndpointRemovedError", "hint_contains": "Upgrade" },
+    { "status": 503, "body": { "message": "Server is offline or unavailable", "status": "offline", "Code": "OFFLINE" }, "type": "ServerOfflineError", "hint_contains": "online" }
+  ],
+
+  "failed_command": {
+    "result": { "CommandId": "c2", "Status": "Failed", "Code": "TARGET_NOT_FOUND", "Message": "No one in the server matches x" },
+    "hint_contains": "user ID"
+  },
+
+  "latest": {
+    "kept": ["Online", "Server", "Players", "Vehicles", "World", "Teams", "Queue", "Robberies", "Staff", "Groups", "Settings"],
+    "not_kept": ["KillLogs", "JoinLogs", "Events", "Bans"]
+  },
+
+  "offline": { "players": null, "online": false, "staff_count": 1 }
+}

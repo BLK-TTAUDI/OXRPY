@@ -1,0 +1,147 @@
+{
+  "Online": true,
+  "LastHeartbeat": 1793578004,
+  "NextHeartbeat": 1793578009,
+  "Cursor": 88412,
+  "Server": {
+    "ServerId": "9b2e41c7-5d3a-4f08-8c61-2e7d0a94b1f3",
+    "Name": "Thames Valley RP",
+    "OwnerId": 81234001,
+    "CurrentPlayers": 31,
+    "MaxPlayers": 36,
+    "Access": "Listed",
+    "JoinCode": "K7QX2",
+    "Packages": ["API", "RoleplayKit", "FleetKit"],
+    "StartedAt": 1793561200,
+    "PlaceVersion": 25573,
+    "CommandChannel": "Connected"
+  },
+  "Players": [
+    {
+      "UserId": 81234401, "Username": "kieran_rd", "DisplayName": "Kieran",
+      "Team": "Police", "Callsign": "TV-214", "Rank": "Mod", "RankId": "mod",
+      "Position": [512.4, 14.2, -88.0], "Heading": 274,
+      "Location": { "Road": "High St", "Area": "Oxford Bank", "Grid": "O10", "Address": "12 High St" },
+      "Health": 82, "MaxHealth": 100,
+      "Downed": false, "DownedCall": false, "Tased": false, "Invincible": false,
+      "Custody": null, "Wanted": null, "Jailed": null, "Vehicle": null,
+      "Holding": { "Item": "G36C", "Aiming": true, "Ammo": 22, "Spare": 60 },
+      "Stance": "Running",
+      "Unit": { "Status": "En route", "IncidentId": "3E1C8A52-6B0F-4D2A-9C77-21F4B0D6A913", "ControlOperator": false },
+      "Carrying": null, "Job": null, "Disguised": false,
+      "SessionSeconds": 4821, "AccountAgeDays": 1203
+    },
+    {
+      "UserId": 99120344, "Username": "dxrkrider", "DisplayName": "Dark",
+      "Team": "Civilian", "Callsign": null, "Rank": null, "RankId": null,
+      "Position": [640.0, 13.0, -140.0], "Heading": 90,
+      "Location": { "Road": "Cowley Rd", "Area": "Cowley", "Grid": "P11", "Address": null },
+      "Health": 100, "MaxHealth": 100,
+      "Downed": false, "DownedCall": false, "Tased": false, "Invincible": false,
+      "Custody": null,
+      "Wanted": { "Level": 2, "EndsAt": 1793578300, "Paused": false, "Offences": ["Speeding"] },
+      "Jailed": null,
+      "Vehicle": { "Plate": "RJ75 FLK", "Seat": "Driver", "Owner": true },
+      "Holding": null, "Stance": null, "Unit": null, "Carrying": null, "Job": null, "Disguised": false,
+      "SessionSeconds": 902, "AccountAgeDays": 61
+    },
+    { "UserId": 99120377, "Username": "kierstan", "DisplayName": "K" }
+  ],
+  "Vehicles": [
+    {
+      "Plate": "OX24 KRD", "OwnerId": 81234401, "Team": "Police",
+      "Model": "Strassen Reuter", "Livery": "Marked", "Custom": null,
+      "Colour": null, "Electric": false,
+      "Position": [301.2, 12.0, 412.8], "Heading": 90, "SpeedMph": 71,
+      "Location": { "Road": "London Rd", "Area": "Headington", "Grid": "N6", "Address": null },
+      "EngineOn": true, "Locked": false, "Health": 64, "Smoking": false,
+      "Fuel": { "Litres": 18.2, "Capacity": 25 },
+      "Tyres": { "FL": "OK", "FR": "OK", "RL": "Popped", "RR": "OK" },
+      "Lights": { "Headlights": "Full", "Indicator": "Off", "Braking": false, "Reversing": false },
+      "Horn": false,
+      "Els": {
+        "Style": "Blue", "HasLightbar": true, "HasAlleys": true, "Mode": "999", "Active": true,
+        "Panel": {
+          "FrontBlues": true, "RearBlues": true, "GrilleBlues": true, "RearReds": false, "FrontSpots": false,
+          "TakeDown": false, "Cruise": false, "SlowPattern": false, "LeftAlley": false, "RightAlley": false, "Rumbler": true
+        },
+        "Siren": { "Armed": true, "Tone": "Wail", "Bullhorn": false }
+      },
+      "Occupants": [{ "Seat": "Driver", "UserId": 81234401 }],
+      "Towing": null, "Cargo": [], "Anpr": true, "Appliance": null, "SpawnedAt": 1793576620
+    },
+    {
+      "Plate": "RJ75 FLK", "OwnerId": 99120344, "Team": "Civilian",
+      "Model": "Strassen Solo", "Livery": null, "Custom": null,
+      "Colour": { "Name": "Vandyke Red", "Hex": "#5e1914" }, "Electric": false,
+      "Position": [640.0, 13.0, -140.0], "Heading": 90, "SpeedMph": 47,
+      "Location": { "Road": "Cowley Rd", "Area": "Cowley", "Grid": "P11", "Address": null },
+      "EngineOn": true, "Locked": false, "Health": 100, "Smoking": false,
+      "Fuel": { "Litres": 20.0, "Capacity": 25 }, "Tyres": { "FL": "OK", "FR": "OK", "RL": "OK", "RR": "OK" },
+      "Lights": { "Headlights": "Dipped", "Indicator": "Off", "Braking": false, "Reversing": false },
+      "Horn": false, "Els": null,
+      "Occupants": [{ "Seat": "Driver", "UserId": 99120344 }],
+      "Towing": null, "Cargo": [], "Anpr": false, "Appliance": null, "SpawnedAt": 1793577100
+    }
+  ],
+  "World": {
+    "Weather": "Rain", "WeatherLocked": false, "TemperatureC": 9,
+    "Clock": "18:42", "ClockMinutes": 1122, "ClockLocked": false,
+    "Night": true, "StreetLights": true, "SnowCover": 0, "Season": "Autumn",
+    "SpeedLimitMph": null, "StickyMessage": null, "CountdownEndsAt": null, "NpcCallouts": true
+  },
+  "Teams": {
+    "Police": { "Players": 6, "Limit": 8, "DefaultLimit": 10, "CustomLimit": true, "Access": { "Staff": false, "StaffRanks": null, "Groups": ["a1b2c3d4"] } },
+    "Civilian": { "Players": 19, "Limit": null, "DefaultLimit": null, "CustomLimit": false, "Access": null }
+  },
+  "Queue": [
+    { "UserId": 99120412, "JoinedAt": 1793577960, "Priority": 0 }
+  ],
+  "Robberies": [
+    { "Name": "OxfordBank", "DisplayName": "Oxford Bank", "State": "Robbery", "Stage": "Hacking",
+      "Alarm": true, "Robbers": [99120344], "LootRemaining": 9, "OpensAt": null, "Position": [412.3, 10.0, 1238.4] }
+  ],
+  "Staff": {
+    "OwnerId": 81234001,
+    "Staff": [
+      { "UserId": 81234401, "Username": "kieran_rd", "RankId": "mod", "Rank": "Mod", "Online": true },
+      { "UserId": 81239912, "Username": "amy_hx", "RankId": "senior-mod", "Rank": "Senior Moderator", "Online": false }
+    ],
+    "Ranks": [
+      { "Id": "manager", "Name": "Manager", "Priority": 30 },
+      { "Id": "admin", "Name": "Admin", "Priority": 20 },
+      { "Id": "senior-mod", "Name": "Senior Moderator", "Priority": 15 },
+      { "Id": "mod", "Name": "Mod", "Priority": 10 }
+    ]
+  },
+  "Groups": [
+    { "Id": "cid", "Name": "CID", "Sync": { "GroupId": 1234567, "Rank": 50 }, "Members": [81234401, 81239912] }
+  ],
+  "Bans": {
+    "Total": 2,
+    "Offset": 0,
+    "List": [
+      { "UserId": 99120501, "Username": "m4tty_b", "Reason": "RDM", "BannedBy": "amy_hx", "BannedById": 81239912, "ExpiresAt": 1794182400 },
+      { "UserId": 99120999, "Username": "spammer", "Reason": "Exploiting", "BannedBy": "API", "BannedById": 0, "ExpiresAt": null }
+    ]
+  },
+  "Settings": {
+    "Name": "Thames Valley RP", "MaxPlayers": 36, "PublicListed": true, "Tags": ["Serious", "UK"],
+    "TeamLimits": { "Police": 8, "Fire": 6 }, "FriendlyFire": false, "AdminWebhook": "(set)"
+  },
+  "KillLogs": [
+    { "Seq": 88391, "Id": "5c1f9a2e:4127", "Type": "Kill", "At": 1793577981,
+      "KillerUserId": 81234401, "KillerUsername": "kieran_rd", "VictimUserId": 99120344, "VictimUsername": "dxrkrider",
+      "Distance": 38, "Weapon": "G36C", "KillerPosition": [512.4, 14.2, -88.0], "VictimPosition": [540.9, 13.8, -112.6],
+      "Part": "Head", "Headshot": true }
+  ],
+  "JoinLogs": [
+    { "Seq": 88405, "Id": "5c1f9a2e:4136", "Type": "Leave", "At": 1793578002, "UserId": 99120412, "Username": "quietguy", "DisplayName": "Quiet", "JoinType": "Leave" },
+    { "Seq": 88380, "Id": "5c1f9a2e:4120", "Type": "Join", "At": 1793577950, "UserId": 99120377, "Username": "kierstan", "DisplayName": "K", "JoinType": "Join" }
+  ],
+  "Events": [
+    { "Seq": 88402, "Id": "5c1f9a2e:4133", "Type": "SpeedCamera", "At": 1793578001,
+      "UserId": 99120344, "Plate": "RJ75 FLK", "Limit": 30, "SpeedMph": 47, "Fine": 250, "Place": "Cowley Rd", "Position": [-102.5, 5.2, 1450.0] },
+    { "Seq": 88395, "Id": "5c1f9a2e:4130", "Type": "Downed", "At": 1793577982, "UserId": 99120344, "Username": "dxrkrider", "Position": [540.9, 13.8, -112.6] }
+  ]
+}
