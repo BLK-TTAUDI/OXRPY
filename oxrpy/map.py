@@ -54,7 +54,8 @@ def to_pixels(
 
     Args:
         position: ``[x, y, z]`` from the API (or ``(x, z)``).
-        width, height: Your image's size. Defaults to the full-size image.
+        width: Your image's width in pixels. Defaults to the full-size image.
+        height: Your image's height in pixels. Defaults to the full-size image.
         clamp: Keep the point inside the image (otherwise points off the map come back
             negative or larger than the image).
     """

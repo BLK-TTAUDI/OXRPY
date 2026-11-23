@@ -195,6 +195,8 @@ class BaseClient(CommandHelpers):
         self._limiters = self._make_limiters(rate_limit)
         self._handlers = Handlers()
         self._catalogue_cache: Optional[Tuple[float, Any]] = None
+        # An extra limit shared with other clients (AsyncServerPool sets it: 30/s per IP).
+        self._ip_bucket: Any = None
 
     # ------------------------------------------------------------------ rate limits
 

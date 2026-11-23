@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
 
 import requests
 
@@ -52,13 +52,28 @@ class OxfordAPI(SyncSignatures, BaseClient):
             network error / 500 on a read.
         base_url: Override the API base URL (for testing).
         session: Use your own ``requests.Session``.
+        global_key: Removed in 2.0; passing it warns and treats it as ``app_key``.
+        server_id: No longer used; passing it warns.
     """
 
     _bucket_class = TokenBucket
 
-    def __init__(self, server_key: Optional[str] = None, *, session: Optional[requests.Session] = None,
-                 **kwargs: Any) -> None:
-        super().__init__(server_key, **kwargs)
+    def __init__(
+        self,
+        server_key: Optional[str] = None,
+        *,
+        app_key: Optional[str] = None,
+        timeout: float = 10,
+        rate_limit: Union[str, float, None] = "auto",
+        max_retries: int = 3,
+        base_url: str = BASE_URL,
+        session: Optional[requests.Session] = None,
+        global_key: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> None:
+        super().__init__(server_key, app_key=app_key, timeout=timeout, rate_limit=rate_limit,
+                         max_retries=max_retries, base_url=base_url, global_key=global_key,
+                         server_id=server_id)
         self.session = session or requests.Session()
         self.session.headers.update(self.headers)
         self._stop = threading.Event()
@@ -171,9 +186,13 @@ class OxfordAPI(SyncSignatures, BaseClient):
             time.sleep(interval)
 
     def follow(self, *logs: str, sections: Sequence[str] = (), limit: Optional[int] = None,
-               cursor: Optional[int] = None) -> LogFollower:
-        """A :class:`~oxrpy.LogFollower` that yields only new log entries. See its docs."""
-        return LogFollower(self, logs or ("Events",), sections=sections, limit=limit, cursor=cursor)
+               cursor: Optional[int] = None, save_to: Any = None) -> LogFollower:
+        """A :class:`~oxrpy.LogFollower` that yields only new log entries. See its docs.
+
+        ``save_to`` (a file path, or an object with ``load``/``save``) remembers the position
+        across restarts. See :mod:`oxrpy.state`."""
+        return LogFollower(self, logs or ("Events",), sections=sections, limit=limit, cursor=cursor,
+                           save_to=save_to)
 
     def run_forever(
         self,
@@ -182,6 +201,7 @@ class OxfordAPI(SyncSignatures, BaseClient):
         limit: Optional[int] = None,
         cursor: Optional[int] = None,
         skip_existing: bool = True,
+        save_to: Any = None,
     ) -> None:
         """Poll the server and call the handlers registered with :meth:`on`, until :meth:`stop`.
 
@@ -194,13 +214,17 @@ class OxfordAPI(SyncSignatures, BaseClient):
             limit: Most entries per log per request.
             cursor: Resume from a saved cursor (then nothing is skipped).
             skip_existing: Don't replay the entries that were already in the logs when you
-                started. Default ``True``.
+                started. Default ``True``. Ignored when resuming from ``save_to``.
+            save_to: A file path (``"cursor.json"``), or an object with ``load()``/``save(state)``,
+                to remember the position. After a restart, the bot carries on exactly where it
+                left off, including anything that happened while it was down (up to what the
+                logs keep). See :mod:`oxrpy.state`.
         """
         if not self._handlers:
             raise ValueError("No handlers registered: use @api.on('Kill') (or another event) first")
         follower = LogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
-                               cursor=cursor)
-        skip = skip_existing and cursor is None
+                               cursor=cursor, save_to=save_to)
+        skip = skip_existing and follower.cursor is None
         watcher = ServerWatcher()
         self._stop.clear()
         for data, new in follower.iter(stop=self._stop, on_error=self._dispatch_error):

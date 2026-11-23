@@ -108,6 +108,19 @@ def params(name: str) -> str:
     return ", ".join(parts)
 
 
+def doc_body(name: str, indent: str = "        ") -> str:
+    """The method's docstring, so editors and the docs site show it with the typed signature."""
+    doc = inspect.getdoc(getattr(BaseClient, name))
+    if not doc:
+        return " ..."
+    doc = doc.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+    lines = doc.splitlines()
+    if len(lines) == 1:
+        return f'\n{indent}"""{lines[0]}"""'
+    body = "\n".join((indent + line) if line.strip() else "" for line in lines)
+    return f'\n{indent}"""{body.lstrip()}\n{indent}"""'
+
+
 def render() -> str:
     names = endpoint_methods()
     lines = [
@@ -127,10 +140,10 @@ def render() -> str:
         "class SyncSignatures:",
     ]
     for name in names:
-        lines.append(f"    def {name}({params(name)}) -> {return_type(name)}: ...")
+        lines.append(f"    def {name}({params(name)}) -> {return_type(name)}:{doc_body(name)}")
     lines += ["", "", "class AsyncSignatures:"]
     for name in names:
-        lines.append(f"    async def {name}({params(name)}) -> {return_type(name)}: ...")
+        lines.append(f"    async def {name}({params(name)}) -> {return_type(name)}:{doc_body(name)}")
     return "\n".join(lines) + "\n"
 
 

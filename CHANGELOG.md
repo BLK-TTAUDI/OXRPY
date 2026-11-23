@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.3.0
+
+Nothing in this release should break existing code.
+
+### New
+
+- **Carry on after a restart.** `run_forever(save_to="cursor.json")` and
+  `follow(..., save_to=...)` remember where they got to. After a restart, your bot picks up
+  exactly there, including anything that happened while it was down, as long as the logs still
+  hold it. The position is saved after your handlers run, so a crash never loses entries. To
+  keep it in your own database, pass any object with `load()` and `save(state)`.
+- **Many servers in one app.** `AsyncServerPool` runs one set of handlers across lots of
+  servers. Handlers get the server's name first.
+  - With an app key, every server's requests are paced together within your app's limits.
+  - A server whose key stops working is dropped and reported, and the rest carry on.
+  - You can add and remove servers while it runs.
+  - `each()` and `run_command_on_all()` do something on every server at once.
+- **Docs site.** Full guides and a reference for every method, built with MkDocs
+  (`pip install "oxrpy[docs]"`, then `mkdocs serve`).
+
+### Fixed
+
+- Hovering over a method in your editor shows its description again, as well as its types.
+  Since 2.2.0, some editors showed only the types.
+- `OxfordAPI(...)` and `AsyncOxfordAPI(...)` list their arguments properly, so editors
+  autocomplete them.
+
 ## 2.2.0
 
 Nothing in this release should break code written for 2.0 or 2.1.

@@ -10,3 +10,5 @@ venv/
 .pypirc
 # The old 1.3.4 sdist downloaded from PyPI, kept locally for reference
 oxrpy-1.3.4/
+site/
+.claude/

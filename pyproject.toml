@@ -23,6 +23,7 @@ dependencies = ["requests>=2.25"]
 [project.optional-dependencies]
 async = ["httpx>=0.24"]
 test = ["pytest>=7", "httpx>=0.24"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26", "httpx>=0.24"]
 
 [project.scripts]
 oxrpy = "oxrpy.__main__:main"

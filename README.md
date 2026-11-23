@@ -1,4 +1,5 @@
 # oxrpy
+<!-- --8<-- [start:intro] -->
 
 A Python wrapper for the [Oxford Response private server API](https://docs.oxfd.re/). Use it to
 read what's happening on your server and run commands on it from your own bot, website or tool.
@@ -20,6 +21,8 @@ You'll need Python 3.10 or newer.
 > keep working after that. The data comes back in a different format, though, so check
 > [the changelog](https://github.com/BLK-TTAUDI/OXRPY/blob/main/CHANGELOG.md) before you upgrade.
 
+<!-- --8<-- [end:intro] -->
+<!-- --8<-- [start:getting-started] -->
 ## Getting started
 
 You'll need your server's API key. The server owner can find it in **Server Management >
@@ -52,6 +55,8 @@ Keep your key private. Anyone who has it can run commands on your server, change
 and ban people. Keep it on your own machine or bot, and never put it in website code that
 people can see.
 
+<!-- --8<-- [end:getting-started] -->
+<!-- --8<-- [start:reading-data] -->
 ## Reading data
 
 `get_server_data()` lets you ask for any mix of sections in a single request. Section names
@@ -118,6 +123,8 @@ def describe(player: Player) -> str:
     return f'{player["Username"]} ({player.get("Team")})'
 ```
 
+<!-- --8<-- [end:reading-data] -->
+<!-- --8<-- [start:following] -->
 ## Following logs as they happen
 
 `follow()` keeps checking the logs for you and only hands you entries you haven't seen yet,
@@ -148,6 +155,8 @@ The loop keeps going if the internet drops, you get rate limited or the API has 
 It waits a bit longer after each failure in a row (up to a minute) and logs a warning. It only
 stops for problems that waiting won't fix, like a wrong API key, and raises those.
 
+<!-- --8<-- [end:following] -->
+<!-- --8<-- [start:events] -->
 ## Reacting to events
 
 If you just want to run some code whenever something happens in game, register a handler with
@@ -204,6 +213,27 @@ get a flood of old kills on startup. Pass `skip_existing=False` if you want them
 raises, the error is logged and the bot carries on. Call `api.stop()` from a handler, or from
 another thread, to make `run_forever()` return.
 
+### Carrying on after a restart
+
+Bots restart: crashes, updates, the host rebooting. Without help, anything that happens while
+your bot is down is missed. Pass `save_to` and oxrpy remembers where it got to, then picks up
+exactly there next time. That includes what happened while the bot was down, as long as the
+logs still hold it (the last 500 kills, 1,000 events and so on).
+
+```python
+api.run_forever(save_to="cursor.json")
+
+# or with follow()
+for data, new in api.follow("KillLogs", save_to="cursor.json"):
+    ...
+```
+
+The position is saved after your handlers have run for each check, so a crash part-way through
+means those entries come round again rather than being lost. To keep it somewhere other than a
+file, like your bot's database, pass any object with `load()` and `save(state)` methods.
+
+<!-- --8<-- [end:events] -->
+<!-- --8<-- [start:commands] -->
 ## Running commands
 
 ```python
@@ -293,6 +323,8 @@ It never touches the owner. `sync_staff` leaves alone any staff you didn't menti
 pass `remove_others=True`. `sync_group` does remove anyone not in your list, unless you pass
 `remove_others=False`.
 
+<!-- --8<-- [end:commands] -->
+<!-- --8<-- [start:map] -->
 ## Putting things on the map
 
 Oxford publishes [a map image](https://docs.oxfd.re/map-march.png) of the whole map.
@@ -311,6 +343,8 @@ distance(player["Position"], vehicle["Position"])        # studs, ignoring heigh
 nearest(player["Position"], api.get_catalogue()["Map"]["Places"])   # nearest named place
 ```
 
+<!-- --8<-- [end:map] -->
+<!-- --8<-- [start:async] -->
 ## Async (discord.py and friends)
 
 `AsyncOxfordAPI` has all the same methods, but you `await` them, so your bot doesn't freeze
@@ -356,6 +390,45 @@ async for ban in api.iter_bans():
 Use `async with AsyncOxfordAPI(key) as api:`, or call `await api.aclose()` when you're done,
 to close the connection cleanly.
 
+<!-- --8<-- [end:async] -->
+<!-- --8<-- [start:many-servers] -->
+## Many servers in one app
+
+If you're building something lots of servers use (a bot, a CAD, a dashboard), each server's
+owner gives your app their server key. `AsyncServerPool` runs one set of handlers across all of
+them:
+
+```python
+from oxrpy import AsyncServerPool
+
+pool = AsyncServerPool(app_key=os.environ["OXFD_APP_KEY"])   # app key optional
+pool.add("guild-1234", key_from_guild_1234)
+pool.add("guild-5678", key_from_guild_5678)
+
+@pool.on("Kill")
+async def on_kill(server, kill):           # the server's name comes first
+    await post_to_guild(server, kill)
+
+@pool.on("error")
+async def on_error(server, exc):
+    print(f"{server}: {exc}")
+
+await pool.run_forever(save_dir="positions/")
+```
+
+- With an app key, the pool paces every server's requests together. Your app's limits count
+  across all the servers it calls, so separate clients would trip over each other.
+- If an owner regenerates their key, that one server stops being followed. You hear about it
+  through your `error` handler and `pool.failed`, and every other server carries on.
+- You can `pool.add()` and `await pool.remove()` servers while it's running, for example when
+  someone links or unlinks their server.
+- `pool["guild-1234"]` is that server's normal async client, for reads and commands.
+- `await pool.each(lambda api: api.get_players())` and
+  `await pool.run_command_on_all("announce ...")` do something on every server at once.
+- `save_dir` keeps each server's position, so restarts don't miss anything.
+
+<!-- --8<-- [end:many-servers] -->
+<!-- --8<-- [start:app-keys] -->
 ## App keys
 
 If you're making something that lots of servers will use, you can ask Oxford Roleplay for an
@@ -366,6 +439,8 @@ server key for whichever server you're talking to:
 api = OxfordAPI(server_key_for_that_server, app_key=os.environ["OXFD_APP_KEY"])
 ```
 
+<!-- --8<-- [end:app-keys] -->
+<!-- --8<-- [start:rate-limits] -->
 ## Rate limits
 
 oxrpy spaces out your requests so you stay under Oxford's limits:
@@ -382,6 +457,8 @@ If you do get rate limited, it waits as long as the API asks and then tries agai
 The game also has its own limit of 15 commands every 10 seconds per server. Go over it and the
 extra commands fail with `RATE_LIMITED`.
 
+<!-- --8<-- [end:rate-limits] -->
+<!-- --8<-- [start:errors] -->
 ## Errors
 
 ```python
@@ -399,6 +476,8 @@ from oxrpy import (
 Reading data from an offline server doesn't raise an error. `data.online` is `False`, the live
 sections are `None`, and the logs, bans, staff and settings still work.
 
+<!-- --8<-- [end:errors] -->
+<!-- --8<-- [start:status] -->
 ## API status
 
 Want to know if the API itself is up?
@@ -407,6 +486,8 @@ Want to know if the API itself is up?
 api.get_status()   # {"Status": "operational", "UptimeSeconds": ..., "LastHour": {...}, "Uptime": {...}}
 ```
 
+<!-- --8<-- [end:status] -->
+<!-- --8<-- [start:cli] -->
 ## From the command line
 
 Installing oxrpy also gives you an `oxrpy` command for quick checks:
@@ -420,6 +501,8 @@ oxrpy players      # who's in your server
 `server` and `players` read your key from the `OXFD_SERVER_KEY` environment variable. Add
 `--json` to any of them to get the raw data.
 
+<!-- --8<-- [end:cli] -->
+<!-- --8<-- [start:examples] -->
 ## Examples
 
 The [examples folder](https://github.com/BLK-TTAUDI/OXRPY/tree/main/examples) has scripts you
@@ -435,6 +518,9 @@ can copy and run:
 - [sync_staff_from_list.py](https://github.com/BLK-TTAUDI/OXRPY/blob/main/examples/sync_staff_from_list.py)
   keeps staff ranks matching a list, and shows you the changes before making them.
 
+<!-- --8<-- [end:examples] -->
+<!-- --8<-- [start:license] -->
 ## License
 
 Proprietary. See the [LICENSE](https://github.com/BLK-TTAUDI/OXRPY/blob/main/LICENSE) file.
+<!-- --8<-- [end:license] -->

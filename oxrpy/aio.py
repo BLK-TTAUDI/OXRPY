@@ -14,11 +14,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
-from ._base import MAX_BATCH, BaseClient, ServerData, _decode, _Spec, logger
+from ._base import BASE_URL, MAX_BATCH, BaseClient, ServerData, _decode, _Spec, logger
 from .errors import OxfordAPIError, RateLimitError
-from .events import ServerWatcher, dispatch_plan
+from .events import Handlers, ServerWatcher, dispatch_plan
 from .follower import _FollowerBase
 from ._signatures import AsyncSignatures
 from .types import Ban, CommandResult, CommandStatus
@@ -32,19 +32,43 @@ except ImportError:  # pragma: no cover - checked when the client is created
 
 
 class AsyncOxfordAPI(AsyncSignatures, BaseClient):
-    """Async client for the Oxford Response private server API. Takes the same arguments as
-    :class:`~oxrpy.OxfordAPI`, except ``client`` (your own ``httpx.AsyncClient``) in place
-    of ``session``.
+    """Async client for the Oxford Response private server API. Every method of
+    :class:`~oxrpy.OxfordAPI` is here too; you ``await`` them.
 
     Use it with ``async with``, or call ``await api.aclose()`` when you're done.
+
+    Args:
+        server_key: Your server's API key (Server Management > External > API Key).
+        app_key: Optional app key (``oxa_…``), sent alongside the server key.
+        timeout: Seconds to wait for a response (commands always get at least 15).
+        rate_limit: ``"auto"`` (default), ``"none"``, or seconds between requests.
+        max_retries: Retries after a 429, or a network error / 500 on a read.
+        base_url: Override the API base URL (for testing).
+        client: Use your own ``httpx.AsyncClient``.
+        global_key: Removed in 2.0; passing it warns and treats it as ``app_key``.
+        server_id: No longer used; passing it warns.
     """
 
     _bucket_class = AsyncTokenBucket
 
-    def __init__(self, server_key: Optional[str] = None, *, client: Any = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        server_key: Optional[str] = None,
+        *,
+        app_key: Optional[str] = None,
+        timeout: float = 10,
+        rate_limit: Union[str, float, None] = "auto",
+        max_retries: int = 3,
+        base_url: str = BASE_URL,
+        client: Any = None,
+        global_key: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> None:
         if httpx is None:
             raise ImportError("AsyncOxfordAPI needs httpx: pip install \"oxrpy[async]\"")
-        super().__init__(server_key, **kwargs)
+        super().__init__(server_key, app_key=app_key, timeout=timeout, rate_limit=rate_limit,
+                         max_retries=max_retries, base_url=base_url, global_key=global_key,
+                         server_id=server_id)
         self._owns_client = client is None
         self.client = client if client is not None else httpx.AsyncClient()
         self._stop = asyncio.Event()
@@ -60,6 +84,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         attempt = 0
         while True:
             if bucket is not None and not await bucket.acquire(timeout=60):
+                raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
+            if self._ip_bucket is not None and not await self._ip_bucket.acquire(timeout=60):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
             try:
                 response = await self.client.request(
@@ -159,9 +185,13 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
             await asyncio.sleep(interval)
 
     def follow(self, *logs: str, sections: Sequence[str] = (), limit: Optional[int] = None,
-               cursor: Optional[int] = None) -> "AsyncLogFollower":
-        """An :class:`AsyncLogFollower`: ``async for data, new in api.follow("Events"):``"""
-        return AsyncLogFollower(self, logs or ("Events",), sections=sections, limit=limit, cursor=cursor)
+               cursor: Optional[int] = None, save_to: Any = None) -> "AsyncLogFollower":
+        """An :class:`AsyncLogFollower`: ``async for data, new in api.follow("Events"):``
+
+        ``save_to`` (a file path, or an object with ``load``/``save``) remembers the position
+        across restarts. See :mod:`oxrpy.state`."""
+        return AsyncLogFollower(self, logs or ("Events",), sections=sections, limit=limit, cursor=cursor,
+                                save_to=save_to)
 
     async def run_forever(
         self,
@@ -170,41 +200,71 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         limit: Optional[int] = None,
         cursor: Optional[int] = None,
         skip_existing: bool = True,
+        save_to: Any = None,
     ) -> None:
         """Poll and call the handlers registered with :meth:`on` until :meth:`stop` (or the task
         is cancelled). Handlers can be plain functions or ``async def``. In discord.py, start it
         from ``setup_hook`` with ``asyncio.create_task(api.run_forever())``.
 
-        Same behaviour as :meth:`OxfordAPI.run_forever`.
+        Same behaviour and arguments as :meth:`OxfordAPI.run_forever`, including ``save_to``.
         """
         if not self._handlers:
             raise ValueError("No handlers registered: use @api.on('Kill') (or another event) first")
-        follower = AsyncLogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
-                                    cursor=cursor)
-        skip = skip_existing and cursor is None
-        watcher = ServerWatcher()
         self._stop.clear()
-        async for data, new in follower.iter(stop=self._stop, on_error=self._dispatch_error):
-            for fn, arg in dispatch_plan(self._handlers, watcher, data, new, skip):
-                await self._safely(fn, arg)
+        await self._run(
+            self._handlers,
+            lambda fn, arg: fn(arg),
+            stop=self._stop,
+            sections=sections,
+            limit=limit,
+            cursor=cursor,
+            skip_existing=skip_existing,
+            save_to=save_to,
+        )
+
+    async def _run(
+        self,
+        handlers: Handlers,
+        invoke: Callable[[Callable[..., Any], Any], Any],
+        *,
+        stop: asyncio.Event,
+        sections: Sequence[str] = (),
+        limit: Optional[int] = None,
+        cursor: Optional[int] = None,
+        skip_existing: bool = True,
+        save_to: Any = None,
+        on_error: Optional[Callable[[OxfordAPIError], Any]] = None,
+    ) -> None:
+        """The polling loop behind :meth:`run_forever` (and :class:`~oxrpy.AsyncServerPool`).
+        ``invoke(fn, arg)`` calls one handler."""
+        follower = AsyncLogFollower(self, handlers.logs_needed(), sections=sections, limit=limit,
+                                    cursor=cursor, save_to=save_to)
+        skip = skip_existing and follower.cursor is None
+        watcher = ServerWatcher()
+
+        async def call(fn: Callable[..., Any], arg: Any) -> None:
+            try:
+                result = invoke(fn, arg)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:  # noqa: BLE001 - one bad handler shouldn't stop the bot
+                logger.exception("Handler %r raised", getattr(fn, "__name__", fn))
+
+        async def errored(exc: OxfordAPIError) -> None:
+            if on_error is not None:
+                await on_error(exc)
+            for fn in handlers.get("error"):
+                await call(fn, exc)
+
+        async for data, new in follower.iter(stop=stop, on_error=errored):
+            for fn, arg in dispatch_plan(handlers, watcher, data, new, skip):
+                await call(fn, arg)
             skip = False
         self.cursor = follower.cursor
 
     def stop(self) -> None:
         """Make :meth:`run_forever` return after the current poll."""
         self._stop.set()
-
-    async def _safely(self, fn: Callable[..., Any], arg: Any) -> None:
-        try:
-            result = fn(arg)
-            if inspect.isawaitable(result):
-                await result
-        except Exception:  # noqa: BLE001 - one bad handler shouldn't stop the bot
-            logger.exception("Handler %r raised", getattr(fn, "__name__", fn))
-
-    async def _dispatch_error(self, exc: OxfordAPIError) -> None:
-        for fn in self._handlers.get("error"):
-            await self._safely(fn, exc)
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -265,6 +325,7 @@ class AsyncLogFollower(_FollowerBase):
                 await wait(delay)
                 continue
             yield data, new
+            self.save()  # only once the caller has dealt with this poll
             await wait(self.next_delay(data))
 
     def __aiter__(self) -> AsyncIterator[Tuple[ServerData, Dict[str, List[dict]]]]:

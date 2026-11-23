@@ -12,170 +12,442 @@ from .commands import Target
 
 
 class SyncSignatures:
-    def alert(self, message: str, style: str = 'normal', *, check: bool = True) -> t.CommandResult: ...
-    def ambulance_callout(self, player: Optional[Target] = None, *, check: bool = True) -> t.CommandResult: ...
-    def announce(self, message: str, *, check: bool = True) -> t.CommandResult: ...
-    def assign_incident(self, incident_id: str, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def ban(self, user: Target, reason: Optional[str] = None, duration: Union[str, int, timedelta, None] = None, *, check: bool = True) -> t.CommandResult: ...
-    def clear_placeables(self, player: Target = 'all', *, check: bool = True) -> t.CommandResult: ...
-    def close_incident(self, incident_id: str, *, check: bool = True) -> t.CommandResult: ...
-    def countdown(self, seconds: int, *, check: bool = True) -> t.CommandResult: ...
-    def create_incident(self, team: str, priority: int, x: float, z: float, text: str, *, check: bool = True) -> t.CommandResult: ...
-    def despawn_vehicle(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def execute_command(self, command: str) -> t.CommandResult: ...
-    def get_atms(self) -> Optional[List[t.Atm]]: ...
-    def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]: ...
-    def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Optional[t.BansPage]: ...
-    def get_catalogue(self, *, max_age: float = 3600, refresh: bool = False) -> Optional[t.Catalogue]: ...
-    def get_command(self, command_id: str) -> t.CommandStatus: ...
-    def get_command_results(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandResultLog]: ...
-    def get_commandlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandLog]: ...
-    def get_events(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Event]: ...
-    def get_groups(self) -> Optional[List[t.Group]]: ...
-    def get_incidents(self) -> Optional[t.Incidents]: ...
-    def get_joinlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.JoinLog]: ...
-    def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.KillLog]: ...
-    def get_modcalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.ModCall]: ...
-    def get_players(self) -> Optional[List[t.Player]]: ...
-    def get_queue(self) -> Optional[List[t.QueueEntry]]: ...
-    def get_radiocalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.RadioCall]: ...
-    def get_robberies(self) -> Optional[List[t.Robbery]]: ...
-    def get_server(self) -> ServerData: ...
-    def get_server_data(self, *sections: str, since: Optional[int] = None, limit: Optional[int] = None, offset: Optional[int] = None, audit_before: Optional[int] = None, audit_category: Union[str, Iterable[str], None] = None, audit_user: Union[str, int, None] = None, if_none_match: Optional[str] = None) -> Optional[ServerData]: ...
-    def get_settings(self) -> Optional[t.Settings]: ...
-    def get_shots(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Shot]: ...
-    def get_staff(self) -> Optional[t.Staff]: ...
-    def get_status(self) -> t.ApiStatus: ...
-    def get_teams(self) -> Optional[t.Teams]: ...
-    def get_tracks(self) -> Optional[t.Tracks]: ...
-    def get_vehicles(self) -> Optional[List[t.Vehicle]]: ...
-    def get_world(self) -> Optional[t.World]: ...
-    def give(self, players: Target, tool: str, *, check: bool = True) -> t.CommandResult: ...
-    def group_add(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult: ...
-    def group_remove(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult: ...
-    def is_online(self) -> bool: ...
-    def jail(self, player: Target, seconds: Optional[int] = None, *, check: bool = True) -> t.CommandResult: ...
-    def kick(self, player: Target, reason: Optional[str] = None, *, check: bool = True) -> t.CommandResult: ...
-    def list_callouts(self, *, check: bool = True) -> t.CommandResult: ...
-    def lock_time(self, locked: bool = True, *, check: bool = True) -> t.CommandResult: ...
-    def lock_weather(self, locked: bool = True, *, check: bool = True) -> t.CommandResult: ...
-    def new_join_code(self, *, check: bool = True) -> t.CommandResult: ...
-    def plan_group_sync(self, group: str, members: Iterable[Any], *, remove_others: bool = True) -> List[str]: ...
-    def plan_staff_sync(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False) -> List[str]: ...
-    def pm(self, players: Target, message: str, *, check: bool = True) -> t.CommandResult: ...
-    def queue_front(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    def queue_remove(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    def radio(self, team: str, message: str, *, check: bool = True) -> t.CommandResult: ...
-    def rank(self, user: Target, rank: str, *, check: bool = True) -> t.CommandResult: ...
-    def refuel(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def release(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def remove_message(self, *, check: bool = True) -> t.CommandResult: ...
-    def remove_vehicle(self, plate_or_player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def repair(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def resolve_modcall(self, case_id: Target, *, check: bool = True) -> t.CommandResult: ...
-    def respawn(self, players: Target, *, check: bool = True) -> t.CommandResult: ...
-    def revive(self, players: Target, *, check: bool = True) -> t.CommandResult: ...
-    def run_command(self, command: str, *, check: bool = False) -> t.CommandResult: ...
-    def run_commands(self, commands: Sequence[str], *, check: bool = False) -> List[t.CommandResult]: ...
-    def set_invincible(self, players: Target, invincible: bool = True, *, check: bool = True) -> t.CommandResult: ...
-    def set_message(self, message: str, *, check: bool = True) -> t.CommandResult: ...
-    def set_setting(self, name: str, value: Any, *, check: bool = True) -> t.CommandResult: ...
-    def set_team(self, player: Target, team: str, *, check: bool = True) -> t.CommandResult: ...
-    def set_time(self, hour: float, *, check: bool = True) -> t.CommandResult: ...
-    def set_weather(self, weather: str, *, check: bool = True) -> t.CommandResult: ...
-    def shutdown(self, *, check: bool = True) -> t.CommandResult: ...
-    def spawn_vehicle(self, player: Target, custom_vehicle_id: str, *, check: bool = True) -> t.CommandResult: ...
-    def speed_limit(self, mph: Optional[int], *, check: bool = True) -> t.CommandResult: ...
-    def start_callout(self, team: str, key: str, *, check: bool = True) -> t.CommandResult: ...
-    def stop_fires(self, *, check: bool = True) -> t.CommandResult: ...
-    def team_announce(self, team: str, message: str, *, check: bool = True) -> t.CommandResult: ...
-    def teleport(self, players: Target, to_player: Target, *, check: bool = True) -> t.CommandResult: ...
-    def teleport_to_vehicle(self, players: Target, owner: Target, *, check: bool = True) -> t.CommandResult: ...
-    def unban(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    def unrank(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    def wanted(self, players: Target, level: int, *, check: bool = True) -> t.CommandResult: ...
+    def alert(self, message: str, style: str = 'normal', *, check: bool = True) -> t.CommandResult:
+        """An alert to everyone, ``style`` ``"normal"``, ``"yellow"`` or ``"red"``."""
+    def ambulance_callout(self, player: Optional[Target] = None, *, check: bool = True) -> t.CommandResult:
+        """A patient callout for that paramedic, or the first one free (RoleplayKit)."""
+    def announce(self, message: str, *, check: bool = True) -> t.CommandResult:
+        """An announcement to everyone."""
+    def assign_incident(self, incident_id: str, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Send a unit to an incident."""
+    def ban(self, user: Target, reason: Optional[str] = None, duration: Union[str, int, timedelta, None] = None, *, check: bool = True) -> t.CommandResult:
+        """Ban someone, in the server or not. ``duration`` is ``"30m"``, ``"12h"``, ``"7d"``,
+        ``"1d12h"``, a ``timedelta`` or seconds; leave it out for a permanent ban.
+        Reasons can be up to 200 characters.
+        """
+    def clear_placeables(self, player: Target = 'all', *, check: bool = True) -> t.CommandResult:
+        """Pick up one person's cones, signs and other placed items, or everyone's."""
+    def close_incident(self, incident_id: str, *, check: bool = True) -> t.CommandResult:
+        """Close an incident."""
+    def countdown(self, seconds: int, *, check: bool = True) -> t.CommandResult:
+        """Show everyone a countdown. ``0`` stops it."""
+    def create_incident(self, team: str, priority: int, x: float, z: float, text: str, *, check: bool = True) -> t.CommandResult:
+        """Open a control-room incident at ``x, z`` (studs) for an emergency team, priority 1-3.
+        The new incident's ID is in the result's ``Message``.
+        """
+    def despawn_vehicle(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Put someone's vehicle away (the ``despawn`` command)."""
+    def execute_command(self, command: str) -> t.CommandResult:
+        """Old name for :meth:`run_command`."""
+    def get_atms(self) -> Optional[List[t.Atm]]:
+        """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
+    def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]:
+        """One page of the full audit log: ``{ Entries, Next, Total }``. Slower than the rest."""
+    def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Optional[t.BansPage]:
+        """One page of bans: ``{ Total, Offset, List: [...] }``. See ``iter_bans``."""
+    def get_catalogue(self, *, max_age: float = 3600, refresh: bool = False) -> Optional[t.Catalogue]:
+        """Game data that only changes with an update: map, places, weapons, vehicles,
+        offences, teams and ranks.
+
+        It's big and rarely changes, so the client keeps a copy for ``max_age`` seconds
+        (an hour by default) and returns that instead of asking again. Pass ``refresh=True``
+        to fetch a fresh copy, or ``max_age=0`` to never use the stored one.
+        """
+    def get_command(self, command_id: str) -> t.CommandStatus:
+        """One command's result, for a command that was still ``Pending``.
+
+        Keeps the API's old shape: lower-case ``Status`` (``succeeded``, ``failed``,
+        ``pending``, ``no_result``). Results are kept for 7 days.
+        """
+    def get_command_results(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandResultLog]:
+        """Commands sent through the API and how they went. Last 200 kept."""
+    def get_commandlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandLog]:
+        """The newest audit log entries. Last 100 kept."""
+    def get_events(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Event]:
+        """About 100 kinds of game event, newest first. Last 1,000 kept."""
+    def get_groups(self) -> Optional[List[t.Group]]:
+        """The server's groups and their members (``[]`` without AdvancedServer)."""
+    def get_incidents(self) -> Optional[t.Incidents]:
+        """The control room: open incidents, units, operators, timeline."""
+    def get_joinlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.JoinLog]:
+        """Joins and leaves, newest first. Last 500 kept."""
+    def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.KillLog]:
+        """Kills (downs), newest first. Last 500 kept."""
+    def get_modcalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.ModCall]:
+        """Help requests, responders and resolutions, newest first. Last 300 kept."""
+    def get_players(self) -> Optional[List[t.Player]]:
+        """Everyone in the server (``None`` while offline)."""
+    def get_queue(self) -> Optional[List[t.QueueEntry]]:
+        """Who's waiting to join, front first (``None`` while offline)."""
+    def get_radiocalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.RadioCall]:
+        """Radio calls, newest first. Last 500 kept."""
+    def get_robberies(self) -> Optional[List[t.Robbery]]:
+        """Robbery sites: state, stage, alarm, robbers (``None`` while offline)."""
+    def get_server(self) -> ServerData:
+        """The always-returned fields: ``Online``, ``LastHeartbeat``, ``NextHeartbeat``,
+        ``Cursor`` and ``Server`` (name, players, join code, packages…).
+        """
+    def get_server_data(self, *sections: str, since: Optional[int] = None, limit: Optional[int] = None, offset: Optional[int] = None, audit_before: Optional[int] = None, audit_category: Union[str, Iterable[str], None] = None, audit_user: Union[str, int, None] = None, if_none_match: Optional[str] = None) -> Optional[ServerData]:
+        """Everything about the server in one request: ``GET /v1/server``.
+
+        Name each section you want (case doesn't matter), e.g.
+        ``api.get_server_data("Players", "Vehicles", "Events", since=cursor)``.
+        The top-level fields (``Online``, ``LastHeartbeat``, ``NextHeartbeat``, ``Cursor``,
+        ``Server``) always come back.
+
+        Args:
+            since: A ``Cursor`` from an earlier response: logs and shots only return newer entries.
+            limit: Most entries per log/``Shots`` (default 100, max 500), ``Bans`` (max 1000)
+                or ``Audit`` (max 100).
+            offset: Bans to skip.
+            audit_before: Audit entries numbered below this (the last ``Audit.Next``).
+            audit_category: One or more of :data:`AUDIT_CATEGORIES`.
+            audit_user: Only audit entries by this username or user ID.
+            if_none_match: A previous response's ``etag``. Returns ``None`` if nothing changed.
+
+        Returns:
+            A :class:`ServerData` (a ``dict``), or ``None`` on ``304 Not Modified``.
+        """
+    def get_settings(self) -> Optional[t.Settings]:
+        """Every Server Management setting, keyed by name. Webhooks read ``"(set)"``."""
+    def get_shots(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Shot]:
+        """Every shot in the last 10 minutes, newest first."""
+    def get_staff(self) -> Optional[t.Staff]:
+        """``{ OwnerId, Staff: [...], Ranks: [...] }``."""
+    def get_status(self) -> t.ApiStatus:
+        """The API's own health (``GET /status``): status, uptime and response times.
+        Needs no key; don't ask more than every 30 seconds.
+        """
+    def get_teams(self) -> Optional[t.Teams]:
+        """Players, limits and access per team."""
+    def get_tracks(self) -> Optional[t.Tracks]:
+        """Per-second position samples since the last report (``None`` while offline)."""
+    def get_vehicles(self) -> Optional[List[t.Vehicle]]:
+        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline)."""
+    def get_world(self) -> Optional[t.World]:
+        """Weather, temperature, clock, locks, speed limit, sticky message, countdown."""
+    def give(self, players: Target, tool: str, *, check: bool = True) -> t.CommandResult:
+        """Give a RoleplayKit tool: megaphone, firestarter, lectern, flag or staffcuffs."""
+    def group_add(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult:
+        """Add someone to one of your groups (AdvancedServer)."""
+    def group_remove(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult:
+        """Take someone out of one of your groups (AdvancedServer)."""
+    def is_online(self) -> bool:
+        """Whether the server is running right now."""
+    def jail(self, player: Target, seconds: Optional[int] = None, *, check: bool = True) -> t.CommandResult:
+        """Jail someone as an arrest would, for 10 to 3,600 seconds (or the usual sentence)."""
+    def kick(self, player: Target, reason: Optional[str] = None, *, check: bool = True) -> t.CommandResult:
+        """Move someone out of your server, showing the reason. Staff can't be kicked."""
+    def list_callouts(self, *, check: bool = True) -> t.CommandResult:
+        """The callouts you can start, with their keys, in the result's ``Message``."""
+    def lock_time(self, locked: bool = True, *, check: bool = True) -> t.CommandResult:
+        """Stop the clock (or start it again with ``locked=False``)."""
+    def lock_weather(self, locked: bool = True, *, check: bool = True) -> t.CommandResult:
+        """Stop the weather changing by itself (or let it again with ``locked=False``)."""
+    def new_join_code(self, *, check: bool = True) -> t.CommandResult:
+        """Replace the join code with a new random one. The new code is in ``Message``."""
+    def plan_group_sync(self, group: str, members: Iterable[Any], *, remove_others: bool = True) -> List[str]:
+        """The ``group add``/``group remove`` commands needed to make ``group`` contain exactly
+        ``members`` (user IDs). Reads the groups; sends nothing.
+        """
+    def plan_staff_sync(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False) -> List[str]:
+        """The ``rank``/``unrank`` commands needed to make the staff match ``desired``
+        (user ID -> rank name or Id, or ``None`` to remove). Reads the staff list; sends nothing.
+        See :func:`oxrpy.sync.plan_staff_changes`.
+        """
+    def pm(self, players: Target, message: str, *, check: bool = True) -> t.CommandResult:
+        """Send a private message, shown with your server's name and logo."""
+    def queue_front(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Move someone to the front of the join queue."""
+    def queue_remove(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Take someone out of the join queue."""
+    def radio(self, team: str, message: str, *, check: bool = True) -> t.CommandResult:
+        """A radio message from Control to an emergency team."""
+    def rank(self, user: Target, rank: str, *, check: bool = True) -> t.CommandResult:
+        """Put someone on the staff with a rank (its name or Id, e.g. ``"Admin"``), or change it."""
+    def refuel(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Fill someone's tank or battery."""
+    def release(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Release someone from jail."""
+    def remove_message(self, *, check: bool = True) -> t.CommandResult:
+        """Remove the pinned message."""
+    def remove_vehicle(self, plate_or_player: Target, *, check: bool = True) -> t.CommandResult:
+        """Remove a vehicle by registration (``"RJ75 FLK"``) or by its owner."""
+    def repair(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Fully repair someone's vehicle, tyres included."""
+    def resolve_modcall(self, case_id: Target, *, check: bool = True) -> t.CommandResult:
+        """Mark a mod call (help request) as handled. The ``CaseId`` is in ``ModCalls``."""
+    def respawn(self, players: Target, *, check: bool = True) -> t.CommandResult:
+        """Respawn them (the ``load`` command)."""
+    def revive(self, players: Target, *, check: bool = True) -> t.CommandResult:
+        """Get anyone downed back up."""
+    def run_command(self, command: str, *, check: bool = False) -> t.CommandResult:
+        """Run one command (as you'd type it in game; the leading ``:`` is optional).
+
+        Waits up to 8 seconds for the result: ``{ CommandId, Status, Code, Message }``.
+        ``Status`` is ``Succeeded``, ``Failed`` or ``Pending``. A ``Failed`` command is still a
+        normal return unless ``check=True``, which raises :class:`CommandFailedError`.
+
+        Raises:
+            ServerOfflineError: The server is offline (nothing was run).
+            RateLimitError: Still rate limited after ``max_retries``.
+        """
+    def run_commands(self, commands: Sequence[str], *, check: bool = False) -> List[t.CommandResult]:
+        """Run up to 10 commands in order, in one request. Returns one result per command."""
+    def set_invincible(self, players: Target, invincible: bool = True, *, check: bool = True) -> t.CommandResult:
+        """Make them unable to be hurt by weapons (or able to again), until they leave."""
+    def set_message(self, message: str, *, check: bool = True) -> t.CommandResult:
+        """Pin a message on everyone's screen until it's removed."""
+    def set_setting(self, name: str, value: Any, *, check: bool = True) -> t.CommandResult:
+        """Change a Server Management setting. ``value`` is sent as JSON, so pass Python values:
+        ``api.set_setting("TeamLimits", {"Police": 8})``. Lists and objects replace the whole value.
+        """
+    def set_team(self, player: Target, team: str, *, check: bool = True) -> t.CommandResult:
+        """Put someone on a team, ignoring team limits and locks."""
+    def set_time(self, hour: float, *, check: bool = True) -> t.CommandResult:
+        """Set the clock to an hour from 0 to 24 (``13.5`` is 13:30)."""
+    def set_weather(self, weather: str, *, check: bool = True) -> t.CommandResult:
+        """Clear, Rain, Snow or Thunderstorm."""
+    def shutdown(self, *, check: bool = True) -> t.CommandResult:
+        """Shut the server down, sending everyone to a public server."""
+    def spawn_vehicle(self, player: Target, custom_vehicle_id: str, *, check: bool = True) -> t.CommandResult:
+        """Spawn one of your FleetKit custom vehicles in front of them."""
+    def speed_limit(self, mph: Optional[int], *, check: bool = True) -> t.CommandResult:
+        """Limit every vehicle to 5-200 MPH (RoleplayKit). ``None`` or ``0`` lifts it."""
+    def start_callout(self, team: str, key: str, *, check: bool = True) -> t.CommandResult:
+        """Start a Fire or Highways callout by its key (RoleplayKit; ``list_callouts`` shows keys)."""
+    def stop_fires(self, *, check: bool = True) -> t.CommandResult:
+        """Put out every fire and end every fire callout (RoleplayKit)."""
+    def team_announce(self, team: str, message: str, *, check: bool = True) -> t.CommandResult:
+        """An announcement to one team."""
+    def teleport(self, players: Target, to_player: Target, *, check: bool = True) -> t.CommandResult:
+        """Teleport them next to another player (the ``tp`` command)."""
+    def teleport_to_vehicle(self, players: Target, owner: Target, *, check: bool = True) -> t.CommandResult:
+        """Teleport them next to another player's vehicle (the ``tocar`` command)."""
+    def unban(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Lift someone's ban."""
+    def unrank(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Take someone off the staff, whatever their rank."""
+    def wanted(self, players: Target, level: int, *, check: bool = True) -> t.CommandResult:
+        """Set a wanted level from 0 to 3. ``players`` can be a name, ``all``, ``team:Civilian``…"""
 
 
 class AsyncSignatures:
-    async def alert(self, message: str, style: str = 'normal', *, check: bool = True) -> t.CommandResult: ...
-    async def ambulance_callout(self, player: Optional[Target] = None, *, check: bool = True) -> t.CommandResult: ...
-    async def announce(self, message: str, *, check: bool = True) -> t.CommandResult: ...
-    async def assign_incident(self, incident_id: str, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def ban(self, user: Target, reason: Optional[str] = None, duration: Union[str, int, timedelta, None] = None, *, check: bool = True) -> t.CommandResult: ...
-    async def clear_placeables(self, player: Target = 'all', *, check: bool = True) -> t.CommandResult: ...
-    async def close_incident(self, incident_id: str, *, check: bool = True) -> t.CommandResult: ...
-    async def countdown(self, seconds: int, *, check: bool = True) -> t.CommandResult: ...
-    async def create_incident(self, team: str, priority: int, x: float, z: float, text: str, *, check: bool = True) -> t.CommandResult: ...
-    async def despawn_vehicle(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def execute_command(self, command: str) -> t.CommandResult: ...
-    async def get_atms(self) -> Optional[List[t.Atm]]: ...
-    async def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]: ...
-    async def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Optional[t.BansPage]: ...
-    async def get_catalogue(self, *, max_age: float = 3600, refresh: bool = False) -> Optional[t.Catalogue]: ...
-    async def get_command(self, command_id: str) -> t.CommandStatus: ...
-    async def get_command_results(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandResultLog]: ...
-    async def get_commandlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandLog]: ...
-    async def get_events(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Event]: ...
-    async def get_groups(self) -> Optional[List[t.Group]]: ...
-    async def get_incidents(self) -> Optional[t.Incidents]: ...
-    async def get_joinlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.JoinLog]: ...
-    async def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.KillLog]: ...
-    async def get_modcalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.ModCall]: ...
-    async def get_players(self) -> Optional[List[t.Player]]: ...
-    async def get_queue(self) -> Optional[List[t.QueueEntry]]: ...
-    async def get_radiocalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.RadioCall]: ...
-    async def get_robberies(self) -> Optional[List[t.Robbery]]: ...
-    async def get_server(self) -> ServerData: ...
-    async def get_server_data(self, *sections: str, since: Optional[int] = None, limit: Optional[int] = None, offset: Optional[int] = None, audit_before: Optional[int] = None, audit_category: Union[str, Iterable[str], None] = None, audit_user: Union[str, int, None] = None, if_none_match: Optional[str] = None) -> Optional[ServerData]: ...
-    async def get_settings(self) -> Optional[t.Settings]: ...
-    async def get_shots(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Shot]: ...
-    async def get_staff(self) -> Optional[t.Staff]: ...
-    async def get_status(self) -> t.ApiStatus: ...
-    async def get_teams(self) -> Optional[t.Teams]: ...
-    async def get_tracks(self) -> Optional[t.Tracks]: ...
-    async def get_vehicles(self) -> Optional[List[t.Vehicle]]: ...
-    async def get_world(self) -> Optional[t.World]: ...
-    async def give(self, players: Target, tool: str, *, check: bool = True) -> t.CommandResult: ...
-    async def group_add(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult: ...
-    async def group_remove(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult: ...
-    async def is_online(self) -> bool: ...
-    async def jail(self, player: Target, seconds: Optional[int] = None, *, check: bool = True) -> t.CommandResult: ...
-    async def kick(self, player: Target, reason: Optional[str] = None, *, check: bool = True) -> t.CommandResult: ...
-    async def list_callouts(self, *, check: bool = True) -> t.CommandResult: ...
-    async def lock_time(self, locked: bool = True, *, check: bool = True) -> t.CommandResult: ...
-    async def lock_weather(self, locked: bool = True, *, check: bool = True) -> t.CommandResult: ...
-    async def new_join_code(self, *, check: bool = True) -> t.CommandResult: ...
-    async def plan_group_sync(self, group: str, members: Iterable[Any], *, remove_others: bool = True) -> List[str]: ...
-    async def plan_staff_sync(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False) -> List[str]: ...
-    async def pm(self, players: Target, message: str, *, check: bool = True) -> t.CommandResult: ...
-    async def queue_front(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def queue_remove(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def radio(self, team: str, message: str, *, check: bool = True) -> t.CommandResult: ...
-    async def rank(self, user: Target, rank: str, *, check: bool = True) -> t.CommandResult: ...
-    async def refuel(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def release(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def remove_message(self, *, check: bool = True) -> t.CommandResult: ...
-    async def remove_vehicle(self, plate_or_player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def repair(self, player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def resolve_modcall(self, case_id: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def respawn(self, players: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def revive(self, players: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def run_command(self, command: str, *, check: bool = False) -> t.CommandResult: ...
-    async def run_commands(self, commands: Sequence[str], *, check: bool = False) -> List[t.CommandResult]: ...
-    async def set_invincible(self, players: Target, invincible: bool = True, *, check: bool = True) -> t.CommandResult: ...
-    async def set_message(self, message: str, *, check: bool = True) -> t.CommandResult: ...
-    async def set_setting(self, name: str, value: Any, *, check: bool = True) -> t.CommandResult: ...
-    async def set_team(self, player: Target, team: str, *, check: bool = True) -> t.CommandResult: ...
-    async def set_time(self, hour: float, *, check: bool = True) -> t.CommandResult: ...
-    async def set_weather(self, weather: str, *, check: bool = True) -> t.CommandResult: ...
-    async def shutdown(self, *, check: bool = True) -> t.CommandResult: ...
-    async def spawn_vehicle(self, player: Target, custom_vehicle_id: str, *, check: bool = True) -> t.CommandResult: ...
-    async def speed_limit(self, mph: Optional[int], *, check: bool = True) -> t.CommandResult: ...
-    async def start_callout(self, team: str, key: str, *, check: bool = True) -> t.CommandResult: ...
-    async def stop_fires(self, *, check: bool = True) -> t.CommandResult: ...
-    async def team_announce(self, team: str, message: str, *, check: bool = True) -> t.CommandResult: ...
-    async def teleport(self, players: Target, to_player: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def teleport_to_vehicle(self, players: Target, owner: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def unban(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def unrank(self, user: Target, *, check: bool = True) -> t.CommandResult: ...
-    async def wanted(self, players: Target, level: int, *, check: bool = True) -> t.CommandResult: ...
+    async def alert(self, message: str, style: str = 'normal', *, check: bool = True) -> t.CommandResult:
+        """An alert to everyone, ``style`` ``"normal"``, ``"yellow"`` or ``"red"``."""
+    async def ambulance_callout(self, player: Optional[Target] = None, *, check: bool = True) -> t.CommandResult:
+        """A patient callout for that paramedic, or the first one free (RoleplayKit)."""
+    async def announce(self, message: str, *, check: bool = True) -> t.CommandResult:
+        """An announcement to everyone."""
+    async def assign_incident(self, incident_id: str, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Send a unit to an incident."""
+    async def ban(self, user: Target, reason: Optional[str] = None, duration: Union[str, int, timedelta, None] = None, *, check: bool = True) -> t.CommandResult:
+        """Ban someone, in the server or not. ``duration`` is ``"30m"``, ``"12h"``, ``"7d"``,
+        ``"1d12h"``, a ``timedelta`` or seconds; leave it out for a permanent ban.
+        Reasons can be up to 200 characters.
+        """
+    async def clear_placeables(self, player: Target = 'all', *, check: bool = True) -> t.CommandResult:
+        """Pick up one person's cones, signs and other placed items, or everyone's."""
+    async def close_incident(self, incident_id: str, *, check: bool = True) -> t.CommandResult:
+        """Close an incident."""
+    async def countdown(self, seconds: int, *, check: bool = True) -> t.CommandResult:
+        """Show everyone a countdown. ``0`` stops it."""
+    async def create_incident(self, team: str, priority: int, x: float, z: float, text: str, *, check: bool = True) -> t.CommandResult:
+        """Open a control-room incident at ``x, z`` (studs) for an emergency team, priority 1-3.
+        The new incident's ID is in the result's ``Message``.
+        """
+    async def despawn_vehicle(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Put someone's vehicle away (the ``despawn`` command)."""
+    async def execute_command(self, command: str) -> t.CommandResult:
+        """Old name for :meth:`run_command`."""
+    async def get_atms(self) -> Optional[List[t.Atm]]:
+        """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
+    async def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]:
+        """One page of the full audit log: ``{ Entries, Next, Total }``. Slower than the rest."""
+    async def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Optional[t.BansPage]:
+        """One page of bans: ``{ Total, Offset, List: [...] }``. See ``iter_bans``."""
+    async def get_catalogue(self, *, max_age: float = 3600, refresh: bool = False) -> Optional[t.Catalogue]:
+        """Game data that only changes with an update: map, places, weapons, vehicles,
+        offences, teams and ranks.
+
+        It's big and rarely changes, so the client keeps a copy for ``max_age`` seconds
+        (an hour by default) and returns that instead of asking again. Pass ``refresh=True``
+        to fetch a fresh copy, or ``max_age=0`` to never use the stored one.
+        """
+    async def get_command(self, command_id: str) -> t.CommandStatus:
+        """One command's result, for a command that was still ``Pending``.
+
+        Keeps the API's old shape: lower-case ``Status`` (``succeeded``, ``failed``,
+        ``pending``, ``no_result``). Results are kept for 7 days.
+        """
+    async def get_command_results(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandResultLog]:
+        """Commands sent through the API and how they went. Last 200 kept."""
+    async def get_commandlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.CommandLog]:
+        """The newest audit log entries. Last 100 kept."""
+    async def get_events(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Event]:
+        """About 100 kinds of game event, newest first. Last 1,000 kept."""
+    async def get_groups(self) -> Optional[List[t.Group]]:
+        """The server's groups and their members (``[]`` without AdvancedServer)."""
+    async def get_incidents(self) -> Optional[t.Incidents]:
+        """The control room: open incidents, units, operators, timeline."""
+    async def get_joinlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.JoinLog]:
+        """Joins and leaves, newest first. Last 500 kept."""
+    async def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.KillLog]:
+        """Kills (downs), newest first. Last 500 kept."""
+    async def get_modcalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.ModCall]:
+        """Help requests, responders and resolutions, newest first. Last 300 kept."""
+    async def get_players(self) -> Optional[List[t.Player]]:
+        """Everyone in the server (``None`` while offline)."""
+    async def get_queue(self) -> Optional[List[t.QueueEntry]]:
+        """Who's waiting to join, front first (``None`` while offline)."""
+    async def get_radiocalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.RadioCall]:
+        """Radio calls, newest first. Last 500 kept."""
+    async def get_robberies(self) -> Optional[List[t.Robbery]]:
+        """Robbery sites: state, stage, alarm, robbers (``None`` while offline)."""
+    async def get_server(self) -> ServerData:
+        """The always-returned fields: ``Online``, ``LastHeartbeat``, ``NextHeartbeat``,
+        ``Cursor`` and ``Server`` (name, players, join code, packages…).
+        """
+    async def get_server_data(self, *sections: str, since: Optional[int] = None, limit: Optional[int] = None, offset: Optional[int] = None, audit_before: Optional[int] = None, audit_category: Union[str, Iterable[str], None] = None, audit_user: Union[str, int, None] = None, if_none_match: Optional[str] = None) -> Optional[ServerData]:
+        """Everything about the server in one request: ``GET /v1/server``.
+
+        Name each section you want (case doesn't matter), e.g.
+        ``api.get_server_data("Players", "Vehicles", "Events", since=cursor)``.
+        The top-level fields (``Online``, ``LastHeartbeat``, ``NextHeartbeat``, ``Cursor``,
+        ``Server``) always come back.
+
+        Args:
+            since: A ``Cursor`` from an earlier response: logs and shots only return newer entries.
+            limit: Most entries per log/``Shots`` (default 100, max 500), ``Bans`` (max 1000)
+                or ``Audit`` (max 100).
+            offset: Bans to skip.
+            audit_before: Audit entries numbered below this (the last ``Audit.Next``).
+            audit_category: One or more of :data:`AUDIT_CATEGORIES`.
+            audit_user: Only audit entries by this username or user ID.
+            if_none_match: A previous response's ``etag``. Returns ``None`` if nothing changed.
+
+        Returns:
+            A :class:`ServerData` (a ``dict``), or ``None`` on ``304 Not Modified``.
+        """
+    async def get_settings(self) -> Optional[t.Settings]:
+        """Every Server Management setting, keyed by name. Webhooks read ``"(set)"``."""
+    async def get_shots(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Shot]:
+        """Every shot in the last 10 minutes, newest first."""
+    async def get_staff(self) -> Optional[t.Staff]:
+        """``{ OwnerId, Staff: [...], Ranks: [...] }``."""
+    async def get_status(self) -> t.ApiStatus:
+        """The API's own health (``GET /status``): status, uptime and response times.
+        Needs no key; don't ask more than every 30 seconds.
+        """
+    async def get_teams(self) -> Optional[t.Teams]:
+        """Players, limits and access per team."""
+    async def get_tracks(self) -> Optional[t.Tracks]:
+        """Per-second position samples since the last report (``None`` while offline)."""
+    async def get_vehicles(self) -> Optional[List[t.Vehicle]]:
+        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline)."""
+    async def get_world(self) -> Optional[t.World]:
+        """Weather, temperature, clock, locks, speed limit, sticky message, countdown."""
+    async def give(self, players: Target, tool: str, *, check: bool = True) -> t.CommandResult:
+        """Give a RoleplayKit tool: megaphone, firestarter, lectern, flag or staffcuffs."""
+    async def group_add(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult:
+        """Add someone to one of your groups (AdvancedServer)."""
+    async def group_remove(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult:
+        """Take someone out of one of your groups (AdvancedServer)."""
+    async def is_online(self) -> bool:
+        """Whether the server is running right now."""
+    async def jail(self, player: Target, seconds: Optional[int] = None, *, check: bool = True) -> t.CommandResult:
+        """Jail someone as an arrest would, for 10 to 3,600 seconds (or the usual sentence)."""
+    async def kick(self, player: Target, reason: Optional[str] = None, *, check: bool = True) -> t.CommandResult:
+        """Move someone out of your server, showing the reason. Staff can't be kicked."""
+    async def list_callouts(self, *, check: bool = True) -> t.CommandResult:
+        """The callouts you can start, with their keys, in the result's ``Message``."""
+    async def lock_time(self, locked: bool = True, *, check: bool = True) -> t.CommandResult:
+        """Stop the clock (or start it again with ``locked=False``)."""
+    async def lock_weather(self, locked: bool = True, *, check: bool = True) -> t.CommandResult:
+        """Stop the weather changing by itself (or let it again with ``locked=False``)."""
+    async def new_join_code(self, *, check: bool = True) -> t.CommandResult:
+        """Replace the join code with a new random one. The new code is in ``Message``."""
+    async def plan_group_sync(self, group: str, members: Iterable[Any], *, remove_others: bool = True) -> List[str]:
+        """The ``group add``/``group remove`` commands needed to make ``group`` contain exactly
+        ``members`` (user IDs). Reads the groups; sends nothing.
+        """
+    async def plan_staff_sync(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False) -> List[str]:
+        """The ``rank``/``unrank`` commands needed to make the staff match ``desired``
+        (user ID -> rank name or Id, or ``None`` to remove). Reads the staff list; sends nothing.
+        See :func:`oxrpy.sync.plan_staff_changes`.
+        """
+    async def pm(self, players: Target, message: str, *, check: bool = True) -> t.CommandResult:
+        """Send a private message, shown with your server's name and logo."""
+    async def queue_front(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Move someone to the front of the join queue."""
+    async def queue_remove(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Take someone out of the join queue."""
+    async def radio(self, team: str, message: str, *, check: bool = True) -> t.CommandResult:
+        """A radio message from Control to an emergency team."""
+    async def rank(self, user: Target, rank: str, *, check: bool = True) -> t.CommandResult:
+        """Put someone on the staff with a rank (its name or Id, e.g. ``"Admin"``), or change it."""
+    async def refuel(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Fill someone's tank or battery."""
+    async def release(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Release someone from jail."""
+    async def remove_message(self, *, check: bool = True) -> t.CommandResult:
+        """Remove the pinned message."""
+    async def remove_vehicle(self, plate_or_player: Target, *, check: bool = True) -> t.CommandResult:
+        """Remove a vehicle by registration (``"RJ75 FLK"``) or by its owner."""
+    async def repair(self, player: Target, *, check: bool = True) -> t.CommandResult:
+        """Fully repair someone's vehicle, tyres included."""
+    async def resolve_modcall(self, case_id: Target, *, check: bool = True) -> t.CommandResult:
+        """Mark a mod call (help request) as handled. The ``CaseId`` is in ``ModCalls``."""
+    async def respawn(self, players: Target, *, check: bool = True) -> t.CommandResult:
+        """Respawn them (the ``load`` command)."""
+    async def revive(self, players: Target, *, check: bool = True) -> t.CommandResult:
+        """Get anyone downed back up."""
+    async def run_command(self, command: str, *, check: bool = False) -> t.CommandResult:
+        """Run one command (as you'd type it in game; the leading ``:`` is optional).
+
+        Waits up to 8 seconds for the result: ``{ CommandId, Status, Code, Message }``.
+        ``Status`` is ``Succeeded``, ``Failed`` or ``Pending``. A ``Failed`` command is still a
+        normal return unless ``check=True``, which raises :class:`CommandFailedError`.
+
+        Raises:
+            ServerOfflineError: The server is offline (nothing was run).
+            RateLimitError: Still rate limited after ``max_retries``.
+        """
+    async def run_commands(self, commands: Sequence[str], *, check: bool = False) -> List[t.CommandResult]:
+        """Run up to 10 commands in order, in one request. Returns one result per command."""
+    async def set_invincible(self, players: Target, invincible: bool = True, *, check: bool = True) -> t.CommandResult:
+        """Make them unable to be hurt by weapons (or able to again), until they leave."""
+    async def set_message(self, message: str, *, check: bool = True) -> t.CommandResult:
+        """Pin a message on everyone's screen until it's removed."""
+    async def set_setting(self, name: str, value: Any, *, check: bool = True) -> t.CommandResult:
+        """Change a Server Management setting. ``value`` is sent as JSON, so pass Python values:
+        ``api.set_setting("TeamLimits", {"Police": 8})``. Lists and objects replace the whole value.
+        """
+    async def set_team(self, player: Target, team: str, *, check: bool = True) -> t.CommandResult:
+        """Put someone on a team, ignoring team limits and locks."""
+    async def set_time(self, hour: float, *, check: bool = True) -> t.CommandResult:
+        """Set the clock to an hour from 0 to 24 (``13.5`` is 13:30)."""
+    async def set_weather(self, weather: str, *, check: bool = True) -> t.CommandResult:
+        """Clear, Rain, Snow or Thunderstorm."""
+    async def shutdown(self, *, check: bool = True) -> t.CommandResult:
+        """Shut the server down, sending everyone to a public server."""
+    async def spawn_vehicle(self, player: Target, custom_vehicle_id: str, *, check: bool = True) -> t.CommandResult:
+        """Spawn one of your FleetKit custom vehicles in front of them."""
+    async def speed_limit(self, mph: Optional[int], *, check: bool = True) -> t.CommandResult:
+        """Limit every vehicle to 5-200 MPH (RoleplayKit). ``None`` or ``0`` lifts it."""
+    async def start_callout(self, team: str, key: str, *, check: bool = True) -> t.CommandResult:
+        """Start a Fire or Highways callout by its key (RoleplayKit; ``list_callouts`` shows keys)."""
+    async def stop_fires(self, *, check: bool = True) -> t.CommandResult:
+        """Put out every fire and end every fire callout (RoleplayKit)."""
+    async def team_announce(self, team: str, message: str, *, check: bool = True) -> t.CommandResult:
+        """An announcement to one team."""
+    async def teleport(self, players: Target, to_player: Target, *, check: bool = True) -> t.CommandResult:
+        """Teleport them next to another player (the ``tp`` command)."""
+    async def teleport_to_vehicle(self, players: Target, owner: Target, *, check: bool = True) -> t.CommandResult:
+        """Teleport them next to another player's vehicle (the ``tocar`` command)."""
+    async def unban(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Lift someone's ban."""
+    async def unrank(self, user: Target, *, check: bool = True) -> t.CommandResult:
+        """Take someone off the staff, whatever their rank."""
+    async def wanted(self, players: Target, level: int, *, check: bool = True) -> t.CommandResult:
+        """Set a wanted level from 0 to 3. ``players`` can be a name, ``all``, ``team:Civilian``…"""

@@ -8,6 +8,7 @@ import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from ._base import LOG_SECTIONS, ServerData, _section_name
+from .state import as_store, make_state, read_state
 from .errors import (
     AuthenticationError,
     BadRequestError,
@@ -44,6 +45,7 @@ class _FollowerBase:
         sections: Sequence[str] = (),
         limit: Optional[int] = None,
         cursor: Optional[int] = None,
+        save_to: Any = None,
     ) -> None:
         self.api = api
         self.logs = [_section_name(log) for log in logs]
@@ -56,6 +58,25 @@ class _FollowerBase:
         self.handled: Dict[str, int] = {}
         self.last: Optional[ServerData] = None
         self.failures = 0
+        self.store = as_store(save_to)
+        #: True if the position was loaded from ``save_to``.
+        self.resumed = False
+        if self.store is not None and cursor is None:
+            saved = read_state(self.store.load())
+            if saved is not None:
+                self.cursor = saved["Cursor"]
+                self.handled = saved["Handled"]
+                self.resumed = True
+                logger.info("Resuming from saved position (cursor %s)", self.cursor)
+
+    def save(self) -> None:
+        """Save the current position to ``save_to`` (done for you after each poll when you loop
+        over the follower or use ``run_forever``). Call it yourself if you use :meth:`poll`."""
+        if self.store is not None and self.cursor is not None:
+            try:
+                self.store.save(make_state(self.cursor, self.handled))
+            except Exception:  # noqa: BLE001 - a failed save shouldn't stop the bot
+                logger.exception("Couldn't save the position to %r", self.store)
 
     def _request_args(self) -> Tuple[List[str], Dict[str, Any]]:
         return [*self.logs, *self.sections], {"since": self.cursor, "limit": self.limit}
@@ -123,6 +144,8 @@ class LogFollower(_FollowerBase):
         limit: Most entries per log per request (API default 100, max 500).
         cursor: Resume from a ``Cursor`` you saved. ``None`` starts with the newest ``limit``
             entries of each log.
+        save_to: A file path, or an object with ``load()``/``save(state)``, to remember the
+            position across restarts. See :mod:`oxrpy.state`.
     """
 
     api: "OxfordAPI"
@@ -160,6 +183,7 @@ class LogFollower(_FollowerBase):
                 wait(delay)
                 continue
             yield data, new
+            self.save()  # only once the caller has dealt with this poll
             wait(self.next_delay(data))
 
     def __iter__(self) -> Iterator[Tuple[ServerData, Dict[str, List[dict]]]]:

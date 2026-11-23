@@ -21,6 +21,34 @@ jobs:
       - run: pip install -e ".[test]"
       - run: pytest -q
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[test]" mypy
+      - run: mypy oxrpy
+
+  docs:
+    # Builds the docs site so a broken page or docstring is caught. The built site is kept as a
+    # download on the run (Actions > the run > Artifacts) for uploading to the docs server.
+    runs-on: ubuntu-latest
+    env:
+      NO_MKDOCS_2_WARNING: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[docs]"
+      - run: mkdocs build --strict
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: site/
+
   build:
     needs: test
     runs-on: ubuntu-latest
