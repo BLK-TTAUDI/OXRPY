@@ -4,14 +4,59 @@
 # empty (see _signatures.py); only editors and type checkers read this file.
 
 from datetime import timedelta
-from typing import Any, Iterable, List, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional, Sequence, Union, overload
 
 from . import types as t
 from ._base import ServerData
 from .commands import Target
+from .errors import OxfordAPIError
 
 
 class SyncSignatures:
+    @overload
+    def on(self, key: Literal["Kill", "KillLogs"], /) -> Callable[[Callable[[t.KillLog], Any]], Callable[[t.KillLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Kill", "KillLogs"], handler: Callable[[t.KillLog], Any], /) -> Callable[[t.KillLog], Any]: ...
+    @overload
+    def on(self, key: Literal["ModCall", "ModCalls"], /) -> Callable[[Callable[[t.ModCall], Any]], Callable[[t.ModCall], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["ModCall", "ModCalls"], handler: Callable[[t.ModCall], Any], /) -> Callable[[t.ModCall], Any]: ...
+    @overload
+    def on(self, key: Literal["RadioCall", "RadioCalls"], /) -> Callable[[Callable[[t.RadioCall], Any]], Callable[[t.RadioCall], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["RadioCall", "RadioCalls"], handler: Callable[[t.RadioCall], Any], /) -> Callable[[t.RadioCall], Any]: ...
+    @overload
+    def on(self, key: Literal["Join", "Leave", "JoinLogs"], /) -> Callable[[Callable[[t.JoinLog], Any]], Callable[[t.JoinLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Join", "Leave", "JoinLogs"], handler: Callable[[t.JoinLog], Any], /) -> Callable[[t.JoinLog], Any]: ...
+    @overload
+    def on(self, key: Literal["Command", "CommandLogs"], /) -> Callable[[Callable[[t.CommandLog], Any]], Callable[[t.CommandLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Command", "CommandLogs"], handler: Callable[[t.CommandLog], Any], /) -> Callable[[t.CommandLog], Any]: ...
+    @overload
+    def on(self, key: Literal["CommandResult", "CommandResults"], /) -> Callable[[Callable[[t.CommandResultLog], Any]], Callable[[t.CommandResultLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["CommandResult", "CommandResults"], handler: Callable[[t.CommandResultLog], Any], /) -> Callable[[t.CommandResultLog], Any]: ...
+    @overload
+    def on(self, key: Literal["Shot", "Shots"], /) -> Callable[[Callable[[t.Shot], Any]], Callable[[t.Shot], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Shot", "Shots"], handler: Callable[[t.Shot], Any], /) -> Callable[[t.Shot], Any]: ...
+    @overload
+    def on(self, key: Literal["poll", "ServerOnline", "ServerOffline", "ServerRestart"], /) -> Callable[[Callable[[ServerData], Any]], Callable[[ServerData], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["poll", "ServerOnline", "ServerOffline", "ServerRestart"], handler: Callable[[ServerData], Any], /) -> Callable[[ServerData], Any]: ...
+    @overload
+    def on(self, key: Literal["error"], /) -> Callable[[Callable[[OxfordAPIError], Any]], Callable[[OxfordAPIError], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["error"], handler: Callable[[OxfordAPIError], Any], /) -> Callable[[OxfordAPIError], Any]: ...
+    @overload
+    def on(self, key: str, /) -> Callable[[Callable[[t.Event], Any]], Callable[[t.Event], Any]]: ...
+    @overload
+    def on(self, *keys: Any) -> Any:
+        """Register a handler for ``run_forever``. ``@api.on("Kill")`` handlers get a
+        ``KillLog``, ``"Join"``/``"Leave"`` a ``JoinLog``, ``"poll"`` and the server events the
+        response, ``"error"`` the exception, and game event types (``"SpeedCamera"``) an
+        ``Event``. See ``BaseClient.on``."""
     def alert(self, message: str, style: str = 'normal', *, check: bool = True) -> t.CommandResult:
         """An alert to everyone, ``style`` ``"normal"``, ``"yellow"`` or ``"red"``."""
     def ambulance_callout(self, player: Optional[Target] = None, *, check: bool = True) -> t.CommandResult:
@@ -39,6 +84,20 @@ class SyncSignatures:
         """Put someone's vehicle away (the ``despawn`` command)."""
     def execute_command(self, command: str) -> t.CommandResult:
         """Old name for :meth:`run_command`."""
+    def find_player(self, query: Union[str, int], *, max_age: float = 2.0) -> Optional[t.Player]:
+        """The player ``query`` means, matched the way Oxford's commands match ``<player>``:
+        username or display name (any case), then user ID, then part of a name. ``None`` if
+        nobody matches (or the server's offline).
+
+        Uses ``api.latest`` if its Players are under ``max_age`` seconds old, otherwise fetches.
+
+        Raises:
+            oxrpy.lookup.AmbiguousMatchError: Several players match; ``matches`` lists them.
+        """
+    def find_vehicle(self, plate_or_player: Union[str, int], *, max_age: float = 2.0) -> Optional[t.Vehicle]:
+        """A vehicle by registration (``"rj75flk"`` finds ``"RJ75 FLK"``), or else by its owner's
+        name or user ID. ``None`` if there isn't one.
+        """
     def get_atms(self) -> Optional[List[t.Atm]]:
         """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
     def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]:
@@ -155,6 +214,8 @@ class SyncSignatures:
         (user ID -> rank name or Id, or ``None`` to remove). Reads the staff list; sends nothing.
         See :func:`oxrpy.sync.plan_staff_changes`.
         """
+    def players_on_team(self, team: str, *, max_age: float = 2.0) -> List[t.Player]:
+        """Everyone on a team (``"Police"``, ``"civilian"``…). ``[]`` while offline."""
     def pm(self, players: Target, message: str, *, check: bool = True) -> t.CommandResult:
         """Send a private message, shown with your server's name and logo."""
     def queue_front(self, user: Target, *, check: bool = True) -> t.CommandResult:
@@ -214,6 +275,8 @@ class SyncSignatures:
         """Spawn one of your FleetKit custom vehicles in front of them."""
     def speed_limit(self, mph: Optional[int], *, check: bool = True) -> t.CommandResult:
         """Limit every vehicle to 5-200 MPH (RoleplayKit). ``None`` or ``0`` lifts it."""
+    def staff_online(self, *, max_age: float = 2.0) -> List[t.Player]:
+        """Players in the server with a staff rank (the owner included)."""
     def start_callout(self, team: str, key: str, *, check: bool = True) -> t.CommandResult:
         """Start a Fire or Highways callout by its key (RoleplayKit; ``list_callouts`` shows keys)."""
     def stop_fires(self, *, check: bool = True) -> t.CommandResult:
@@ -233,6 +296,50 @@ class SyncSignatures:
 
 
 class AsyncSignatures:
+    @overload
+    def on(self, key: Literal["Kill", "KillLogs"], /) -> Callable[[Callable[[t.KillLog], Any]], Callable[[t.KillLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Kill", "KillLogs"], handler: Callable[[t.KillLog], Any], /) -> Callable[[t.KillLog], Any]: ...
+    @overload
+    def on(self, key: Literal["ModCall", "ModCalls"], /) -> Callable[[Callable[[t.ModCall], Any]], Callable[[t.ModCall], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["ModCall", "ModCalls"], handler: Callable[[t.ModCall], Any], /) -> Callable[[t.ModCall], Any]: ...
+    @overload
+    def on(self, key: Literal["RadioCall", "RadioCalls"], /) -> Callable[[Callable[[t.RadioCall], Any]], Callable[[t.RadioCall], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["RadioCall", "RadioCalls"], handler: Callable[[t.RadioCall], Any], /) -> Callable[[t.RadioCall], Any]: ...
+    @overload
+    def on(self, key: Literal["Join", "Leave", "JoinLogs"], /) -> Callable[[Callable[[t.JoinLog], Any]], Callable[[t.JoinLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Join", "Leave", "JoinLogs"], handler: Callable[[t.JoinLog], Any], /) -> Callable[[t.JoinLog], Any]: ...
+    @overload
+    def on(self, key: Literal["Command", "CommandLogs"], /) -> Callable[[Callable[[t.CommandLog], Any]], Callable[[t.CommandLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Command", "CommandLogs"], handler: Callable[[t.CommandLog], Any], /) -> Callable[[t.CommandLog], Any]: ...
+    @overload
+    def on(self, key: Literal["CommandResult", "CommandResults"], /) -> Callable[[Callable[[t.CommandResultLog], Any]], Callable[[t.CommandResultLog], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["CommandResult", "CommandResults"], handler: Callable[[t.CommandResultLog], Any], /) -> Callable[[t.CommandResultLog], Any]: ...
+    @overload
+    def on(self, key: Literal["Shot", "Shots"], /) -> Callable[[Callable[[t.Shot], Any]], Callable[[t.Shot], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["Shot", "Shots"], handler: Callable[[t.Shot], Any], /) -> Callable[[t.Shot], Any]: ...
+    @overload
+    def on(self, key: Literal["poll", "ServerOnline", "ServerOffline", "ServerRestart"], /) -> Callable[[Callable[[ServerData], Any]], Callable[[ServerData], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["poll", "ServerOnline", "ServerOffline", "ServerRestart"], handler: Callable[[ServerData], Any], /) -> Callable[[ServerData], Any]: ...
+    @overload
+    def on(self, key: Literal["error"], /) -> Callable[[Callable[[OxfordAPIError], Any]], Callable[[OxfordAPIError], Any]]: ...  # type: ignore[overload-overlap]
+    @overload
+    def on(self, key: Literal["error"], handler: Callable[[OxfordAPIError], Any], /) -> Callable[[OxfordAPIError], Any]: ...
+    @overload
+    def on(self, key: str, /) -> Callable[[Callable[[t.Event], Any]], Callable[[t.Event], Any]]: ...
+    @overload
+    def on(self, *keys: Any) -> Any:
+        """Register a handler for ``run_forever``. ``@api.on("Kill")`` handlers get a
+        ``KillLog``, ``"Join"``/``"Leave"`` a ``JoinLog``, ``"poll"`` and the server events the
+        response, ``"error"`` the exception, and game event types (``"SpeedCamera"``) an
+        ``Event``. See ``BaseClient.on``."""
     async def alert(self, message: str, style: str = 'normal', *, check: bool = True) -> t.CommandResult:
         """An alert to everyone, ``style`` ``"normal"``, ``"yellow"`` or ``"red"``."""
     async def ambulance_callout(self, player: Optional[Target] = None, *, check: bool = True) -> t.CommandResult:
@@ -260,6 +367,20 @@ class AsyncSignatures:
         """Put someone's vehicle away (the ``despawn`` command)."""
     async def execute_command(self, command: str) -> t.CommandResult:
         """Old name for :meth:`run_command`."""
+    async def find_player(self, query: Union[str, int], *, max_age: float = 2.0) -> Optional[t.Player]:
+        """The player ``query`` means, matched the way Oxford's commands match ``<player>``:
+        username or display name (any case), then user ID, then part of a name. ``None`` if
+        nobody matches (or the server's offline).
+
+        Uses ``api.latest`` if its Players are under ``max_age`` seconds old, otherwise fetches.
+
+        Raises:
+            oxrpy.lookup.AmbiguousMatchError: Several players match; ``matches`` lists them.
+        """
+    async def find_vehicle(self, plate_or_player: Union[str, int], *, max_age: float = 2.0) -> Optional[t.Vehicle]:
+        """A vehicle by registration (``"rj75flk"`` finds ``"RJ75 FLK"``), or else by its owner's
+        name or user ID. ``None`` if there isn't one.
+        """
     async def get_atms(self) -> Optional[List[t.Atm]]:
         """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
     async def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]:
@@ -376,6 +497,8 @@ class AsyncSignatures:
         (user ID -> rank name or Id, or ``None`` to remove). Reads the staff list; sends nothing.
         See :func:`oxrpy.sync.plan_staff_changes`.
         """
+    async def players_on_team(self, team: str, *, max_age: float = 2.0) -> List[t.Player]:
+        """Everyone on a team (``"Police"``, ``"civilian"``…). ``[]`` while offline."""
     async def pm(self, players: Target, message: str, *, check: bool = True) -> t.CommandResult:
         """Send a private message, shown with your server's name and logo."""
     async def queue_front(self, user: Target, *, check: bool = True) -> t.CommandResult:
@@ -435,6 +558,8 @@ class AsyncSignatures:
         """Spawn one of your FleetKit custom vehicles in front of them."""
     async def speed_limit(self, mph: Optional[int], *, check: bool = True) -> t.CommandResult:
         """Limit every vehicle to 5-200 MPH (RoleplayKit). ``None`` or ``0`` lifts it."""
+    async def staff_online(self, *, max_age: float = 2.0) -> List[t.Player]:
+        """Players in the server with a staff rank (the owner included)."""
     async def start_callout(self, team: str, key: str, *, check: bool = True) -> t.CommandResult:
         """Start a Fire or Highways callout by its key (RoleplayKit; ``list_callouts`` shows keys)."""
     async def stop_fires(self, *, check: bool = True) -> t.CommandResult:

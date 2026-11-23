@@ -21,6 +21,8 @@ from ._base import (  # noqa: F401  (re-exported for 2.0 imports)
     Servers,
     _decode,
     _section_name,
+    _apply_change,
+    _setting_to_change,
     _Spec,
     logger,
 )
@@ -28,7 +30,7 @@ from .errors import OxfordAPIError, RateLimitError
 from .events import ServerWatcher, dispatch_plan
 from .follower import LogFollower
 from ._signatures import SyncSignatures
-from .types import Ban, CommandResult, CommandStatus
+from .types import AuditEntry, Ban, CommandResult, CommandStatus
 from .ratelimit import TokenBucket
 from .sync import CommandWindow, chunk
 
@@ -91,6 +93,7 @@ class OxfordAPI(SyncSignatures, BaseClient):
             headers = dict(self.headers)
             if spec.headers:
                 headers.update(spec.headers)
+            started = time.monotonic()
             try:
                 response = self.session.request(
                     spec.method,
@@ -103,6 +106,7 @@ class OxfordAPI(SyncSignatures, BaseClient):
                 )
             except requests.RequestException as exc:
                 delay = self._network_retry_delay(spec, attempt)
+                self._after_attempt(spec, None, {}, time.monotonic() - started, attempt, exc, delay is not None)
                 if delay is None:
                     raise self._network_error(spec, exc, isinstance(exc, requests.Timeout)) from exc
                 attempt += 1
@@ -111,6 +115,8 @@ class OxfordAPI(SyncSignatures, BaseClient):
 
             body = _decode(response.content)
             delay = self._response_retry_delay(spec, response.status_code, response.headers, body, attempt)
+            self._after_attempt(spec, response.status_code, response.headers, time.monotonic() - started,
+                                attempt, None, delay is not None)
             if delay is not None:
                 attempt += 1
                 if response.status_code == 429:
@@ -181,6 +187,52 @@ class OxfordAPI(SyncSignatures, BaseClient):
             if not bans or offset >= (page.get("Total") or 0):
                 return
 
+    # ------------------------------------------------------------------ read, change, send back
+
+    def update_setting(self, name: str, change: Any, *, check: bool = True) -> Optional[CommandResult]:
+        """Change part of a setting safely: read it, apply ``change``, send the whole value back.
+
+        Oxford replaces a list or object setting with exactly what you send, so sending one
+        custom vehicle wipes the rest. This reads the current value first::
+
+            api.update_setting("CustomVehicles", lambda cars: cars + [new_car])
+            api.update_setting("TeamLimits", lambda limits: limits.update(Police=8))
+
+        ``change`` gets a copy of the current value. It can return the new value, or change the
+        copy in place and return nothing. Returns the command result, or ``None`` if the value
+        didn't change (then nothing is sent).
+
+        Two changes made at the same moment from different places can still overwrite each
+        other, so don't run several at once for the same setting.
+
+        Raises:
+            KeyError: No setting has that name (with suggestions, as names are case-sensitive).
+            ValueError: It's a webhook setting, which the API won't show, so it can't be read back.
+        """
+        current = _setting_to_change(self.get_settings(), name)
+        new = _apply_change(current, change)
+        if new == current:
+            return None
+        return self.set_setting(name, new, check=check)
+
+    def iter_audit(
+        self,
+        *,
+        category: Union[str, Iterable[str], None] = None,
+        user: Union[str, int, None] = None,
+        page_size: int = 100,
+    ) -> Iterator[AuditEntry]:
+        """Yield the whole audit log, newest first, fetching pages as needed. Filter by
+        ``category`` (e.g. ``"Moderation"``) and/or ``user`` (username or user ID)."""
+        before: Optional[int] = None
+        while True:
+            page = self.get_audit(before=before, category=category, user=user, limit=page_size) or {}
+            yield from page.get("Entries") or []
+            nxt = page.get("Next")
+            if nxt is None or (before is not None and nxt >= before):
+                return
+            before = nxt
+
     def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> CommandStatus:
         """Poll :meth:`get_command` until it's no longer ``pending`` (gives up after ``timeout``)."""
         deadline = time.monotonic() + timeout
@@ -207,6 +259,8 @@ class OxfordAPI(SyncSignatures, BaseClient):
         cursor: Optional[int] = None,
         skip_existing: bool = True,
         save_to: Any = None,
+        adaptive: bool = False,
+        max_idle: float = 5.0,
     ) -> None:
         """Poll the server and call the handlers registered with :meth:`on`, until :meth:`stop`.
 
@@ -220,6 +274,9 @@ class OxfordAPI(SyncSignatures, BaseClient):
             cursor: Resume from a saved cursor (then nothing is skipped).
             skip_existing: Don't replay the entries that were already in the logs when you
                 started. Default ``True``. Ignored when resuming from ``save_to``.
+            adaptive: Poll less often while nothing's happening, up to every ``max_idle``
+                seconds (see :meth:`LogFollower.next_delay`). Off by default.
+            max_idle: The slowest polling gets with ``adaptive``, in seconds.
             save_to: A file path (``"cursor.json"``), or an object with ``load()``/``save(state)``,
                 to remember the position. After a restart, the bot carries on exactly where it
                 left off, including anything that happened while it was down (up to what the
@@ -228,7 +285,7 @@ class OxfordAPI(SyncSignatures, BaseClient):
         if not self._handlers:
             raise ValueError("No handlers registered: use @api.on('Kill') (or another event) first")
         follower = LogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
-                               cursor=cursor, save_to=save_to)
+                               cursor=cursor, save_to=save_to, adaptive=adaptive, max_idle=max_idle)
         skip = skip_existing and follower.cursor is None
         watcher = ServerWatcher()
         self._stop.clear()

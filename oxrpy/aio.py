@@ -16,12 +16,12 @@ import inspect
 import time
 from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
-from ._base import BASE_URL, MAX_BATCH, BaseClient, ServerData, _decode, _Spec, logger
+from ._base import BASE_URL, MAX_BATCH, BaseClient, ServerData, _apply_change, _decode, _setting_to_change, _Spec, logger
 from .errors import OxfordAPIError, RateLimitError
 from .events import Handlers, ServerWatcher, dispatch_plan
 from .follower import _FollowerBase
 from ._signatures import AsyncSignatures
-from .types import Ban, CommandResult, CommandStatus
+from .types import AuditEntry, Ban, CommandResult, CommandStatus
 from .ratelimit import AsyncTokenBucket
 from .sync import CommandWindow, chunk
 
@@ -87,6 +87,7 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
             if self._ip_bucket is not None and not await self._ip_bucket.acquire(timeout=60):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
+            started = time.monotonic()
             try:
                 response = await self.client.request(
                     spec.method,
@@ -99,6 +100,7 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
                 )
             except httpx.HTTPError as exc:
                 delay = self._network_retry_delay(spec, attempt)
+                self._after_attempt(spec, None, {}, time.monotonic() - started, attempt, exc, delay is not None)
                 if delay is None:
                     raise self._network_error(spec, exc, isinstance(exc, httpx.TimeoutException)) from exc
                 attempt += 1
@@ -107,6 +109,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
 
             body = _decode(response.content)
             delay = self._response_retry_delay(spec, response.status_code, response.headers, body, attempt)
+            self._after_attempt(spec, response.status_code, response.headers, time.monotonic() - started,
+                                attempt, None, delay is not None)
             if delay is not None:
                 attempt += 1
                 if response.status_code == 429:
@@ -176,6 +180,36 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
             if not bans or offset >= (page.get("Total") or 0):
                 return
 
+    # ------------------------------------------------------------------ read, change, send back
+
+    async def update_setting(self, name: str, change: Any, *, check: bool = True) -> Optional[CommandResult]:
+        """Change part of a setting safely: read it, apply ``change``, send the whole value back.
+        Same as :meth:`OxfordAPI.update_setting`."""
+        current = _setting_to_change(await self.get_settings(), name)
+        new = _apply_change(current, change)
+        if new == current:
+            return None
+        return await self.set_setting(name, new, check=check)
+
+    async def iter_audit(
+        self,
+        *,
+        category: Union[str, Iterable[str], None] = None,
+        user: Union[str, int, None] = None,
+        page_size: int = 100,
+    ) -> AsyncIterator[AuditEntry]:
+        """``async for entry in api.iter_audit(category="Moderation"):`` the whole audit log,
+        newest first. Same as :meth:`OxfordAPI.iter_audit`."""
+        before: Optional[int] = None
+        while True:
+            page = await self.get_audit(before=before, category=category, user=user, limit=page_size) or {}
+            for entry in page.get("Entries") or []:
+                yield entry
+            nxt = page.get("Next")
+            if nxt is None or (before is not None and nxt >= before):
+                return
+            before = nxt
+
     async def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> CommandStatus:
         """Poll :meth:`get_command` until it's no longer ``pending`` (gives up after ``timeout``)."""
         deadline = time.monotonic() + timeout
@@ -202,6 +236,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         cursor: Optional[int] = None,
         skip_existing: bool = True,
         save_to: Any = None,
+        adaptive: bool = False,
+        max_idle: float = 5.0,
     ) -> None:
         """Poll and call the handlers registered with :meth:`on` until :meth:`stop` (or the task
         is cancelled). Handlers can be plain functions or ``async def``. In discord.py, start it
@@ -221,6 +257,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
             cursor=cursor,
             skip_existing=skip_existing,
             save_to=save_to,
+            adaptive=adaptive,
+            max_idle=max_idle,
         )
 
     async def _run(
@@ -235,11 +273,13 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         skip_existing: bool = True,
         save_to: Any = None,
         on_error: Optional[Callable[[OxfordAPIError], Any]] = None,
+        adaptive: bool = False,
+        max_idle: float = 5.0,
     ) -> None:
         """The polling loop behind :meth:`run_forever` (and :class:`~oxrpy.AsyncServerPool`).
         ``invoke(fn, arg)`` calls one handler."""
         follower = AsyncLogFollower(self, handlers.logs_needed(), sections=sections, limit=limit,
-                                    cursor=cursor, save_to=save_to)
+                                    cursor=cursor, save_to=save_to, adaptive=adaptive, max_idle=max_idle)
         skip = skip_existing and follower.cursor is None
         watcher = ServerWatcher()
 

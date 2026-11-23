@@ -57,11 +57,15 @@ RETURNS = {
     "get_status": "t.ApiStatus",
     "plan_staff_sync": "List[str]",
     "plan_group_sync": "List[str]",
+    "find_player": "Optional[t.Player]",
+    "players_on_team": "List[t.Player]",
+    "staff_online": "List[t.Player]",
+    "find_vehicle": "Optional[t.Vehicle]",
     **{name: f"List[{kind}]" for name, kind in LOG_TYPES.items()},
 }
 
 # Not endpoints: registration, cache control, and the 1.x manager properties.
-SKIP = {"on", "clear_catalogue_cache", "servers", "logs", "commands"}
+SKIP = {"on", "on_request", "clear_catalogue_cache", "servers", "logs", "commands"}
 
 
 
@@ -121,6 +125,46 @@ def doc_body(name: str, indent: str = "        ") -> str:
     return f'\n{indent}"""{body.lstrip()}\n{indent}"""'
 
 
+# What each on(...) key hands its handler, so type checkers can check handlers.
+HANDLER_TYPES = [
+    (("Kill", "KillLogs"), "t.KillLog"),
+    (("ModCall", "ModCalls"), "t.ModCall"),
+    (("RadioCall", "RadioCalls"), "t.RadioCall"),
+    (("Join", "Leave", "JoinLogs"), "t.JoinLog"),
+    (("Command", "CommandLogs"), "t.CommandLog"),
+    (("CommandResult", "CommandResults"), "t.CommandResultLog"),
+    (("Shot", "Shots"), "t.Shot"),
+    (("poll", "ServerOnline", "ServerOffline", "ServerRestart"), "ServerData"),
+    (("error",), "OxfordAPIError"),
+]
+
+
+def on_overloads() -> list:
+    """Overloads for on(): one key and a decorator, or one key and the handler. Anything else
+    (game event types like "SpeedCamera", several keys) is typed as a game Event / Any."""
+    out = []
+    for keys, kind in HANDLER_TYPES:
+        literal = ", ".join(f'"{k}"' for k in keys)
+        out += [
+            "    @overload",
+            # Narrower than the str overload below on purpose: specific keys win.
+            f"    def on(self, key: Literal[{literal}], /) -> Callable[[Callable[[{kind}], Any]], Callable[[{kind}], Any]]: ...  # type: ignore[overload-overlap]",
+            "    @overload",
+            f"    def on(self, key: Literal[{literal}], handler: Callable[[{kind}], Any], /) -> Callable[[{kind}], Any]: ...",
+        ]
+    out += [
+        "    @overload",
+        "    def on(self, key: str, /) -> Callable[[Callable[[t.Event], Any]], Callable[[t.Event], Any]]: ...",
+        "    @overload",
+        "    def on(self, *keys: Any) -> Any:",
+        '        """Register a handler for ``run_forever``. ``@api.on("Kill")`` handlers get a',
+        "        ``KillLog``, ``\"Join\"``/``\"Leave\"`` a ``JoinLog``, ``\"poll\"`` and the server events the",
+        "        response, ``\"error\"`` the exception, and game event types (``\"SpeedCamera\"``) an",
+        '        ``Event``. See ``BaseClient.on``."""',
+    ]
+    return out
+
+
 def render() -> str:
     names = endpoint_methods()
     lines = [
@@ -130,18 +174,21 @@ def render() -> str:
         "# empty (see _signatures.py); only editors and type checkers read this file.",
         "",
         "from datetime import timedelta",
-        "from typing import Any, Iterable, List, Mapping, Optional, Sequence, Union",
+        "from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional, Sequence, Union, overload",
         "",
         "from . import types as t",
         "from ._base import ServerData",
         "from .commands import Target",
+        "from .errors import OxfordAPIError",
         "",
         "",
         "class SyncSignatures:",
     ]
+    lines += on_overloads()
     for name in names:
         lines.append(f"    def {name}({params(name)}) -> {return_type(name)}:{doc_body(name)}")
     lines += ["", "", "class AsyncSignatures:"]
+    lines += on_overloads()
     for name in names:
         lines.append(f"    async def {name}({params(name)}) -> {return_type(name)}:{doc_body(name)}")
     return "\n".join(lines) + "\n"

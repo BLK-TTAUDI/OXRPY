@@ -46,8 +46,14 @@ class _FollowerBase:
         limit: Optional[int] = None,
         cursor: Optional[int] = None,
         save_to: Any = None,
+        adaptive: bool = False,
+        max_idle: float = 5.0,
     ) -> None:
         self.api = api
+        #: Poll less often while nothing's happening (see :meth:`next_delay`).
+        self.adaptive = adaptive
+        self.max_idle = max(1.0, float(max_idle))
+        self.quiet_polls = 0
         self.logs = [_section_name(log) for log in logs]
         unknown = [log for log in self.logs if log not in LOG_SECTIONS]
         if unknown:
@@ -98,6 +104,7 @@ class _FollowerBase:
             self.cursor = data["Cursor"]
         self.last = data
         self.failures = 0
+        self.quiet_polls = 0 if any(new.values()) else self.quiet_polls + 1
         return new
 
     def _after_error(self, exc: OxfordAPIError, retry: bool) -> float:
@@ -109,12 +116,27 @@ class _FollowerBase:
         return delay
 
     def next_delay(self, data: Optional[ServerData] = None, *, offline_delay: float = 30) -> float:
-        """Seconds to wait before the next poll: just after ``NextHeartbeat``, or ``offline_delay``."""
+        """Seconds to wait before the next poll: just after ``NextHeartbeat``, or ``offline_delay``
+        while the server's offline.
+
+        With ``adaptive=True``, quiet servers are polled less often: each poll that brings no
+        new log entries stretches the wait (1.5x, up to ``max_idle`` seconds), and an empty
+        server goes straight to ``max_idle``. The first new entry brings it back to every
+        heartbeat. Live sections (``api.latest``) can then be up to ``max_idle`` seconds old.
+        """
         data = data if data is not None else self.last
         next_beat = data.get("NextHeartbeat") if data else None
         if not next_beat:
             return offline_delay
-        return max(1.0, next_beat - time.time() + 0.5)
+        delay = max(1.0, next_beat - time.time() + 0.5)
+        if self.adaptive:
+            server = data.get("Server") if data else None
+            players = server.get("CurrentPlayers") if isinstance(server, dict) else None
+            if players == 0:
+                return max(delay, self.max_idle)
+            if self.quiet_polls:
+                delay = max(delay, min(self.max_idle, 1.5 ** self.quiet_polls))
+        return delay
 
 
 class LogFollower(_FollowerBase):

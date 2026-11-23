@@ -1,6 +1,6 @@
 """oxrpy: a Python wrapper for the Oxford Response private server API (https://docs.oxfd.re)."""
 
-__version__ = "2.3.1"
+__version__ = "2.4.0"
 
 from ._base import (  # noqa: E402
     AUDIT_CATEGORIES,
@@ -26,6 +26,9 @@ from .errors import (  # noqa: E402
     ServerOfflineError,
 )
 from .follower import LogFollower  # noqa: E402
+from .live import LiveState  # noqa: E402
+from .lookup import AmbiguousMatchError  # noqa: E402
+from ._base import RequestInfo  # noqa: E402
 from .pool import AsyncServerPool  # noqa: E402
 from .state import FileState, StateStore  # noqa: E402
 from .ratelimit import AsyncTokenBucket, TokenBucket  # noqa: E402
@@ -37,6 +40,9 @@ __all__ = [
     "FileState",
     "StateStore",
     "ServerData",
+    "LiveState",
+    "RequestInfo",
+    "AmbiguousMatchError",
     "LogFollower",
     "AsyncLogFollower",
     "Servers",

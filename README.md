@@ -85,6 +85,8 @@ for ban in api.iter_bans():                 # or every ban, page by page
 
 audit = api.get_audit(category=["Moderation", "Staff"], user="amy_hx", limit=50)
 older = api.get_audit(before=audit["Next"])
+for entry in api.iter_audit(category="Moderation"):    # or the whole log, page by page
+    ...
 
 # Only download the data again if something's changed
 data = api.get_server_data("Players")
@@ -105,6 +107,39 @@ If you need a few sections at once, ask for them all in one `get_server_data()` 
 updates, so oxrpy keeps a copy for an hour and hands that back instead of asking again. Pass
 `refresh=True` to get a fresh one.
 
+### Live data without extra requests
+
+Every time oxrpy gets data from the server, it keeps the newest copy of each live section in
+`api.latest`. Reading from it costs no request, which matters when you only get one a second:
+
+```python
+api.latest.players          # the newest Players oxrpy has seen (None if never, or while offline)
+api.latest.vehicles
+api.latest.online           # True / False
+api.latest.age("Players")   # seconds since it arrived
+```
+
+The usual pattern for a bot is to keep `run_forever(sections=["Players", "Vehicles"])` going,
+so `api.latest` is never more than a second or two old, and answer commands from it. Logs aren't
+kept there, because each response only holds the *new* entries.
+
+### Finding players and vehicles
+
+These match the way Oxford's own commands do: a username or display name (any case), then a
+user ID, then part of a name.
+
+```python
+api.find_player("kieran")        # one player, or None
+api.players_on_team("Police")
+api.staff_online()
+api.find_vehicle("rj75flk")      # by registration (spaces and case don't matter) or owner
+```
+
+If a name matches more than one person, `find_player` raises `AmbiguousMatchError`, and its
+`.matches` lists them, so your bot can ask which one. All four use `api.latest` when it's under
+2 seconds old, and fetch otherwise (`max_age=` changes that). For lists you already have, the
+same functions are in `oxrpy.lookup`.
+
 ### Autocomplete
 
 Your editor knows the shape of everything the API sends back, so it suggests field names as
@@ -124,6 +159,17 @@ from oxrpy.types import Player, Vehicle
 
 def describe(player: Player) -> str:
     return f'{player["Username"]} ({player.get("Team")})'
+```
+
+Handlers are checked too. Give the handler's argument its type, and a type checker will tell you
+if it doesn't match the event:
+
+```python
+from oxrpy.types import KillLog
+
+@api.on("Kill")
+def on_kill(kill: KillLog) -> None:      # a Kill handler declared to take a JoinLog is flagged
+    print(kill["Weapon"])
 ```
 
 <!-- --8<-- [end:reading-data] -->
@@ -296,6 +342,21 @@ The full set:
 - **Server:** `set_setting`, `new_join_code`, `queue_remove`, `queue_front`,
   `clear_placeables` and `shutdown`.
 
+### Changing part of a setting
+
+Oxford replaces a list or object setting with exactly what you send. Sending one custom vehicle
+would wipe the other 149. `update_setting` reads the current value first, lets you change it,
+and sends the whole thing back:
+
+```python
+api.update_setting("CustomVehicles", lambda cars: cars + [new_car])
+api.update_setting("TeamLimits", lambda limits: limits.update(Police=8))   # change it in place
+```
+
+If nothing changed, nothing is sent. A misspelled name gets suggestions (setting names are
+case-sensitive). Webhook settings are refused, because the API only ever shows `"(set)"` for
+them, so the real URL can't be read back.
+
 ### Lots of commands at once
 
 `run_many()` sends any number of commands in order. It batches them 10 at a time and waits
@@ -429,6 +490,10 @@ await pool.run_forever(save_dir="positions/")
 - `await pool.each(lambda api: api.get_players())` and
   `await pool.run_command_on_all("announce ...")` do something on every server at once.
 - `save_dir` keeps each server's position, so restarts don't miss anything.
+- Quiet servers are checked less often (up to every 5 seconds), and busy ones on every update.
+  That lets one app follow far more servers within its rate limit. Pass `adaptive=False` to
+  check every server on every update, or `max_idle=` to change the 5 seconds. A single client
+  can do the same with `run_forever(adaptive=True)`.
 
 <!-- --8<-- [end:many-servers] -->
 <!-- --8<-- [start:app-keys] -->
@@ -460,6 +525,19 @@ If you do get rate limited, it waits as long as the API asks and then tries agai
 The game also has its own limit of 15 commands every 10 seconds per server. Go over it and the
 extra commands fail with `RATE_LIMITED`.
 
+To see where you stand, `api.rate_limit_status` has Oxford's latest figures for each kind of
+request (`"data"`, `"get"` and `"command"`): the steady rate, how many you can make right now,
+and seconds until the next one is free.
+
+To log or measure requests, register a hook. It's called after every attempt, retries
+included:
+
+```python
+@api.on_request
+def log_request(info):
+    print(info.method, info.path, info.status, f"{info.elapsed * 1000:.0f} ms")
+```
+
 <!-- --8<-- [end:rate-limits] -->
 <!-- --8<-- [start:errors] -->
 ## Errors
@@ -475,6 +553,10 @@ from oxrpy import (
     CommandFailedError,    # from run_command(..., check=True); .result has the details
 )
 ```
+
+Errors also suggest a fix where there's a likely one: `exc.hint`, which is also shown when the
+error prints. For example: *403: Invalid API key (hint: Check the key in Server Management >
+External > API Key. If it was regenerated, the old one stops working within a few seconds.)*
 
 Reading data from an offline server doesn't raise an error. `data.online` is `False`, the live
 sections are `None`, and the logs, bans, staff and settings still work.

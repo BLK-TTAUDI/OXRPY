@@ -8,10 +8,13 @@ every endpoint is written once and works with both.
 
 from __future__ import annotations
 
+import copy
+import difflib
 import json
 import logging
 import time
 import warnings
+from dataclasses import dataclass
 from http import HTTPStatus
 from urllib.parse import quote, urlsplit
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -29,6 +32,8 @@ from .errors import (
     ServerOfflineError,
 )
 from .events import Handlers
+from .live import LiveState
+from . import lookup
 from .sync import plan_group_changes, plan_staff_changes
 
 logger = logging.getLogger("oxrpy")
@@ -114,6 +119,33 @@ def _decode(content: bytes) -> Any:
         return None
 
 
+def _setting_to_change(settings: Optional[Mapping[str, Any]], name: str) -> Any:
+    """The current value of a setting, checked so it's safe to change and send back."""
+    if settings is None:
+        raise OxfordAPIError("Couldn't read the settings right now; try again shortly")
+    if name not in settings:
+        close = difflib.get_close_matches(name, list(settings), n=3, cutoff=0.6)
+        hint = f" Did you mean {', '.join(repr(c) for c in close)}?" if close else ""
+        raise KeyError(f"No setting called {name!r} (names are case-sensitive).{hint}")
+    value = settings[name]
+    if value == "(set)":
+        raise ValueError(
+            f"{name} is a webhook URL, which the API never returns (it shows \"(set)\"), so it "
+            "can't be changed this way. Use set_setting() with the full URL instead."
+        )
+    return value
+
+
+def _apply_change(current: Any, change: Any) -> Any:
+    """``change`` is a function given a copy of the value (it can return a new value, or change
+    the copy and return ``None``), or simply the new value."""
+    if not callable(change):
+        return change
+    working = copy.deepcopy(current)
+    result = change(working)
+    return working if result is None else result
+
+
 def _check_result(result: Any) -> Any:
     if isinstance(result, dict) and str(result.get("Status", "")).lower() == "failed":
         raise CommandFailedError(result)
@@ -128,6 +160,45 @@ def _check_base_url(base_url: str) -> str:
     if parts.scheme != "https" and not (parts.scheme == "http" and local):
         raise ValueError(f"base_url must be an https:// URL, so your key is never sent unencrypted: {base_url!r}")
     return base_url.rstrip("/")
+
+
+@dataclass(frozen=True)
+class RequestInfo:
+    """What ``on_request`` hooks are told about each HTTP attempt.
+
+    Attributes:
+        method: ``"GET"`` or ``"POST"``.
+        path: The API path, e.g. ``"/server"`` (never includes your key).
+        status: The HTTP status, or ``None`` if the request got no response.
+        elapsed: Seconds the attempt took.
+        attempt: 0 for the first try, then 1, 2 and so on for retries.
+        will_retry: Whether oxrpy is about to try again.
+        error: The network error, if there was no response.
+        rate_limit: Oxford's rate limit headers on the response, if any:
+            ``{"Limit", "Remaining", "Reset"}``.
+    """
+
+    method: str
+    path: str
+    status: Optional[int]
+    elapsed: float
+    attempt: int
+    will_retry: bool
+    error: Optional[BaseException] = None
+    rate_limit: Optional[Dict[str, float]] = None
+
+
+def _rate_limit_headers(headers: Mapping[str, str]) -> Optional[Dict[str, float]]:
+    found: Dict[str, float] = {}
+    for name in ("Limit", "Remaining", "Reset"):
+        value = headers.get(f"X-RateLimit-{name}")
+        if value is None:
+            continue
+        try:
+            found[name] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return found or None
 
 
 class _Spec:
@@ -215,6 +286,10 @@ class BaseClient(CommandHelpers):
         self._catalogue_cache: Optional[Tuple[float, Any]] = None
         # An extra limit shared with other clients (AsyncServerPool sets it: 30/s per IP).
         self._ip_bucket: Any = None
+        self._request_hooks: List[Callable[[RequestInfo], Any]] = []
+        self._rate_limits: Dict[str, Dict[str, float]] = {}
+        #: The newest copy of each live section this client has received. See :mod:`oxrpy.live`.
+        self.latest = LiveState()
 
     # ------------------------------------------------------------------ rate limits
 
@@ -264,6 +339,38 @@ class BaseClient(CommandHelpers):
             return float(min(2 ** (attempt + 1), 10))
         return None
 
+    def _after_attempt(self, spec: _Spec, status: Optional[int], headers: Mapping[str, str], elapsed: float,
+                       attempt: int, error: Optional[BaseException], will_retry: bool) -> None:
+        limits = _rate_limit_headers(headers) if status is not None else None
+        if limits:
+            self._rate_limits[spec.limiter] = {**limits, "At": time.time()}
+        if not self._request_hooks:
+            return
+        info = RequestInfo(spec.method, spec.path, status, elapsed, attempt, will_retry, error, limits)
+        for hook in list(self._request_hooks):
+            try:
+                hook(info)
+            except Exception:  # noqa: BLE001 - a logging hook shouldn't break requests
+                logger.exception("on_request hook %r raised", getattr(hook, "__name__", hook))
+
+    def on_request(self, hook: Callable[[RequestInfo], Any]) -> Callable[[RequestInfo], Any]:
+        """Call ``hook(info)`` after every HTTP attempt, retries included, with a
+        :class:`RequestInfo`: for logging, metrics or watching rate limits. Works as a decorator.
+        Hooks run inline, so keep them quick, and make them plain functions (with the async
+        client too)."""
+        self._request_hooks.append(hook)
+        return hook
+
+    @property
+    def rate_limit_status(self) -> Dict[str, Dict[str, float]]:
+        """Oxford's latest rate limit figures for each kind of request: ``"data"``
+        (``GET /v1/server``), ``"get"`` (other reads) and ``"command"``.
+
+        Each is ``{"Limit", "Remaining", "Reset", "At"}``: the steady rate per second, how many
+        you can make right now, seconds until the next one is free, and when it was seen. Empty
+        until a response has carried the headers."""
+        return {kind: dict(values) for kind, values in self._rate_limits.items()}
+
     def _network_error(self, spec: _Spec, exc: Exception, timed_out: bool) -> OxfordAPIError:
         if timed_out:
             return OxfordAPIError(f"{spec.method} {spec.path} timed out")
@@ -285,6 +392,7 @@ class BaseClient(CommandHelpers):
             data = ServerData(body or {})
             data.etag = headers.get("ETag")
             data.headers = dict(headers)
+            self.latest.update(data)
             return data
         return body
 
@@ -586,6 +694,42 @@ class BaseClient(CommandHelpers):
         if not command_id:
             raise ValueError("command_id is required")
         return self._call(_Spec("GET", f"/server/commands/{quote(str(command_id), safe='')}"))
+
+    # ------------------------------------------------------------------ finding players and vehicles
+
+    def _from_latest(self, sections: Sequence[str], max_age: float, pick: Callable[[Dict[str, Any]], Any]) -> Any:
+        """``pick`` the answer from ``api.latest`` if every section is fresh, else fetch them."""
+        if max_age > 0 and all(self.latest.is_fresh(name, max_age) for name in sections):
+            return self._ready(pick({name: self.latest.get(name) for name in sections}))
+        return self._call(self._server_data_spec(*sections), lambda data: pick(data or {}))
+
+    def find_player(self, query: Union[str, int], *, max_age: float = 2.0) -> Any:
+        """The player ``query`` means, matched the way Oxford's commands match ``<player>``:
+        username or display name (any case), then user ID, then part of a name. ``None`` if
+        nobody matches (or the server's offline).
+
+        Uses ``api.latest`` if its Players are under ``max_age`` seconds old, otherwise fetches.
+
+        Raises:
+            oxrpy.lookup.AmbiguousMatchError: Several players match; ``matches`` lists them.
+        """
+        return self._from_latest(["Players"], max_age, lambda d: lookup.find_player(d.get("Players"), query))
+
+    def players_on_team(self, team: str, *, max_age: float = 2.0) -> Any:
+        """Everyone on a team (``"Police"``, ``"civilian"``…). ``[]`` while offline."""
+        return self._from_latest(["Players"], max_age, lambda d: lookup.players_on_team(d.get("Players"), team))
+
+    def staff_online(self, *, max_age: float = 2.0) -> Any:
+        """Players in the server with a staff rank (the owner included)."""
+        return self._from_latest(["Players"], max_age, lambda d: lookup.staff_online(d.get("Players")))
+
+    def find_vehicle(self, plate_or_player: Union[str, int], *, max_age: float = 2.0) -> Any:
+        """A vehicle by registration (``"rj75flk"`` finds ``"RJ75 FLK"``), or else by its owner's
+        name or user ID. ``None`` if there isn't one."""
+        return self._from_latest(
+            ["Vehicles", "Players"], max_age,
+            lambda d: lookup.find_vehicle(d.get("Vehicles"), plate_or_player, d.get("Players")),
+        )
 
     # ------------------------------------------------------------------ staff and group sync
 

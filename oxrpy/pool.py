@@ -30,9 +30,10 @@ import inspect
 import logging
 import re
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Literal, Optional, Sequence, Tuple, TypeVar, Union, overload
 
-from ._base import BASE_URL
+from . import types as t
+from ._base import BASE_URL, ServerData
 from .aio import AsyncOxfordAPI, httpx
 from .events import Handlers
 from .follower import PERMANENT_ERRORS
@@ -169,6 +170,39 @@ class AsyncServerPool:
 
     # ------------------------------------------------------------------ handlers
 
+    # Typed forms, so a type checker can check handlers: ``(server name, entry)``.
+    @overload
+    def on(self, key: Literal["Kill", "KillLogs"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.KillLog], Any]], Callable[[str, t.KillLog], Any]]: ...
+    @overload
+    def on(self, key: Literal["ModCall", "ModCalls"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.ModCall], Any]], Callable[[str, t.ModCall], Any]]: ...
+    @overload
+    def on(self, key: Literal["RadioCall", "RadioCalls"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.RadioCall], Any]], Callable[[str, t.RadioCall], Any]]: ...
+    @overload
+    def on(self, key: Literal["Join", "Leave", "JoinLogs"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.JoinLog], Any]], Callable[[str, t.JoinLog], Any]]: ...
+    @overload
+    def on(self, key: Literal["Command", "CommandLogs"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.CommandLog], Any]], Callable[[str, t.CommandLog], Any]]: ...
+    @overload
+    def on(self, key: Literal["CommandResult", "CommandResults"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.CommandResultLog], Any]], Callable[[str, t.CommandResultLog], Any]]: ...
+    @overload
+    def on(self, key: Literal["Shot", "Shots"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, t.Shot], Any]], Callable[[str, t.Shot], Any]]: ...
+    @overload
+    def on(self, key: Literal["poll", "ServerOnline", "ServerOffline", "ServerRestart"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, ServerData], Any]], Callable[[str, ServerData], Any]]: ...
+    @overload
+    def on(self, key: Literal["error"], /  # type: ignore[overload-overlap]
+           ) -> Callable[[Callable[[str, Exception], Any]], Callable[[str, Exception], Any]]: ...
+    @overload
+    def on(self, key: str, /) -> Callable[[Callable[[str, t.Event], Any]], Callable[[str, t.Event], Any]]: ...
+    @overload
+    def on(self, *keys: Any) -> Any: ...
+
     def on(self, *keys: Any) -> Any:
         """Register a handler, like :meth:`OxfordAPI.on`, except handlers are called with the
         server's name first: ``async def on_kill(server, kill)``. ``error`` handlers get
@@ -191,6 +225,8 @@ class AsyncServerPool:
         limit: Optional[int] = None,
         skip_existing: bool = True,
         save_dir: Union[str, Path, None] = None,
+        adaptive: bool = True,
+        max_idle: float = 5.0,
     ) -> None:
         """Follow every server and call the handlers until :meth:`stop` (or cancellation).
 
@@ -204,12 +240,17 @@ class AsyncServerPool:
             skip_existing: Don't replay what was already in the logs at start (default).
             save_dir: A folder to keep each server's position in (one small JSON file per
                 server), so a restart carries on where it left off.
+            adaptive: Poll quiet and empty servers less often (on by default), so one app can
+                follow more servers within its rate limit. Busy servers are still polled on every
+                heartbeat. Turn it off to poll every server every heartbeat.
+            max_idle: The slowest a quiet server is polled, in seconds (default 5).
         """
         if not self._handlers:
             raise ValueError("No handlers registered: use @pool.on('Kill') (or another event) first")
         self._stop.clear()
         self._run_options = {"sections": sections, "limit": limit, "skip_existing": skip_existing,
-                             "save_dir": Path(save_dir) if save_dir is not None else None}
+                             "save_dir": Path(save_dir) if save_dir is not None else None,
+                             "adaptive": adaptive, "max_idle": max_idle}
         try:
             for name in list(self._servers):
                 self._start(name)
@@ -257,6 +298,8 @@ class AsyncServerPool:
                 limit=options.get("limit"),
                 skip_existing=options.get("skip_existing", True),
                 save_to=save_to,
+                adaptive=options.get("adaptive", True),
+                max_idle=options.get("max_idle", 5.0),
             )
         except asyncio.CancelledError:
             raise

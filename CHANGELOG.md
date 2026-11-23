@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.4.0
+
+Nothing in this release should break existing code.
+
+### New
+
+- **Live data without extra requests.** `api.latest` keeps the newest copy of each live section
+  the client has received (`.players`, `.vehicles`, `.online`, `.world` and the rest), with
+  `.age(section)` to see how fresh it is. Bots can answer commands from it instead of making a
+  request each time.
+- **Finding players and vehicles** the way Oxford's commands do: `find_player("kieran")`,
+  `players_on_team("Police")`, `staff_online()`, `find_vehicle("rj75flk")`. They use
+  `api.latest` when it's fresh. A name matching several players raises `AmbiguousMatchError`,
+  with the matches. The same functions are in `oxrpy.lookup`.
+- **`update_setting(name, change)`** reads a setting, applies your change and sends the whole
+  value back, so adding one custom vehicle doesn't wipe the rest. It skips sending if nothing
+  changed, suggests names for typos, and refuses webhook settings, which can't be read back.
+- **`iter_audit()`** pages through the whole audit log.
+- **`rate_limit_status`** shows Oxford's latest rate limit figures, and **`on_request(hook)`**
+  calls your function after every request, for logging and metrics.
+- **Smarter polling for many servers.** `AsyncServerPool` checks quiet and empty servers less
+  often (up to every 5 seconds) and busy ones on every update, so one app can follow far more
+  servers. `run_forever(adaptive=True)` does the same for a single client.
+- **Typed handlers.** Type checkers now know what each `on(...)` handler receives (a `KillLog`
+  for `"Kill"`, a `JoinLog` for `"Join"`, the response for `"poll"`, and so on), so a mismatched
+  handler is flagged.
+- **Errors suggest fixes.** Common errors have a `hint`, which is also shown when they print:
+  where to find your key, which package a command needs, and "did you mean" for a misspelled
+  section.
+
 ## 2.3.1
 
 A security release. Upgrading is recommended; nothing should break.
