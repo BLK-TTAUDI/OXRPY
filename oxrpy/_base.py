@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import warnings
 from http import HTTPStatus
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from . import __version__
 from .commands import CommandHelpers
@@ -27,6 +28,7 @@ from .errors import (
     ServerOfflineError,
 )
 from .events import Handlers
+from .sync import plan_group_changes, plan_staff_changes
 
 logger = logging.getLogger("oxrpy")
 
@@ -192,6 +194,7 @@ class BaseClient(CommandHelpers):
             self.headers["Authorization"] = f"Bearer {app_key}"
         self._limiters = self._make_limiters(rate_limit)
         self._handlers = Handlers()
+        self._catalogue_cache: Optional[Tuple[float, Any]] = None
 
     # ------------------------------------------------------------------ rate limits
 
@@ -284,6 +287,10 @@ class BaseClient(CommandHelpers):
     def _call(self, spec: _Spec, transform: Optional[Callable[[Any], Any]] = None) -> Any:
         raise NotImplementedError
 
+    def _ready(self, value: Any) -> Any:
+        """Return ``value`` without a request (the async client wraps it in a coroutine)."""
+        raise NotImplementedError
+
     # ------------------------------------------------------------------ GET /v1/server
 
     def _server_data_spec(
@@ -321,7 +328,17 @@ class BaseClient(CommandHelpers):
         headers = {"If-None-Match": if_none_match} if if_none_match else None
         return _Spec("GET", "/server", limiter="data", params=params, headers=headers, server_data=True)
 
-    def get_server_data(self, *sections: str, **kwargs: Any) -> Any:
+    def get_server_data(
+        self,
+        *sections: str,
+        since: Optional[int] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        audit_before: Optional[int] = None,
+        audit_category: Union[str, Iterable[str], None] = None,
+        audit_user: Union[str, int, None] = None,
+        if_none_match: Optional[str] = None,
+    ) -> Any:
         """Everything about the server in one request: ``GET /v1/server``.
 
         Name each section you want (case doesn't matter), e.g.
@@ -329,7 +346,7 @@ class BaseClient(CommandHelpers):
         The top-level fields (``Online``, ``LastHeartbeat``, ``NextHeartbeat``, ``Cursor``,
         ``Server``) always come back.
 
-        Keyword args:
+        Args:
             since: A ``Cursor`` from an earlier response: logs and shots only return newer entries.
             limit: Most entries per log/``Shots`` (default 100, max 500), ``Bans`` (max 1000)
                 or ``Audit`` (max 100).
@@ -342,7 +359,10 @@ class BaseClient(CommandHelpers):
         Returns:
             A :class:`ServerData` (a ``dict``), or ``None`` on ``304 Not Modified``.
         """
-        return self._call(self._server_data_spec(*sections, **kwargs))
+        return self._call(self._server_data_spec(
+            *sections, since=since, limit=limit, offset=offset, audit_before=audit_before,
+            audit_category=audit_category, audit_user=audit_user, if_none_match=if_none_match,
+        ))
 
     def _section(self, name: str, *, default: Any = None, **kwargs: Any) -> Any:
         def pick(data: Any) -> Any:
@@ -414,9 +434,29 @@ class BaseClient(CommandHelpers):
         """Every Server Management setting, keyed by name. Webhooks read ``"(set)"``."""
         return self._section("Settings")
 
-    def get_catalogue(self) -> Any:
-        """Game data that only changes with an update. Cache it by ``Version``."""
-        return self._section("Catalogue")
+    def get_catalogue(self, *, max_age: float = 3600, refresh: bool = False) -> Any:
+        """Game data that only changes with an update: map, places, weapons, vehicles,
+        offences, teams and ranks.
+
+        It's big and rarely changes, so the client keeps a copy for ``max_age`` seconds
+        (an hour by default) and returns that instead of asking again. Pass ``refresh=True``
+        to fetch a fresh copy, or ``max_age=0`` to never use the stored one.
+        """
+        cached = self._catalogue_cache
+        if cached is not None and not refresh and max_age > 0 and time.monotonic() - cached[0] < max_age:
+            return self._ready(cached[1])
+
+        def store(data: Any) -> Any:
+            value = data.get("Catalogue") if data else None
+            if value is not None:
+                self._catalogue_cache = (time.monotonic(), value)
+            return value
+
+        return self._call(self._server_data_spec("Catalogue"), store)
+
+    def clear_catalogue_cache(self) -> None:
+        """Forget the stored Catalogue, so the next ``get_catalogue`` asks the API."""
+        self._catalogue_cache = None
 
     # Logs
     def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> Any:
@@ -519,6 +559,34 @@ class BaseClient(CommandHelpers):
         if not command_id:
             raise ValueError("command_id is required")
         return self._call(_Spec("GET", f"/server/commands/{command_id}"))
+
+    # ------------------------------------------------------------------ staff and group sync
+
+    def plan_staff_sync(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False) -> Any:
+        """The ``rank``/``unrank`` commands needed to make the staff match ``desired``
+        (user ID -> rank name or Id, or ``None`` to remove). Reads the staff list; sends nothing.
+        See :func:`oxrpy.sync.plan_staff_changes`."""
+
+        def plan(data: Any) -> List[str]:
+            staff = data.get("Staff") if data else None
+            if staff is None:
+                raise OxfordAPIError("Couldn't read the staff list right now; try again shortly")
+            return plan_staff_changes(staff, desired, remove_others=remove_others)
+
+        return self._call(self._server_data_spec("Staff"), plan)
+
+    def plan_group_sync(self, group: str, members: Iterable[Any], *, remove_others: bool = True) -> Any:
+        """The ``group add``/``group remove`` commands needed to make ``group`` contain exactly
+        ``members`` (user IDs). Reads the groups; sends nothing."""
+        members = list(members)
+
+        def plan(data: Any) -> List[str]:
+            groups = data.get("Groups") if data else None
+            if groups is None:
+                raise OxfordAPIError("Couldn't read the groups right now; try again shortly")
+            return plan_group_changes(groups, group, members, remove_others=remove_others)
+
+        return self._call(self._server_data_spec("Groups"), plan)
 
     # ------------------------------------------------------------------ misc
 

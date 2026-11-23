@@ -24,6 +24,9 @@ dependencies = ["requests>=2.25"]
 async = ["httpx>=0.24"]
 test = ["pytest>=7", "httpx>=0.24"]
 
+[project.scripts]
+oxrpy = "oxrpy.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/BLK-TTAUDI/OXRPY"
 Repository = "https://github.com/BLK-TTAUDI/OXRPY"
@@ -37,4 +40,4 @@ packages = ["oxrpy"]
 version = { attr = "oxrpy.__version__" }
 
 [tool.setuptools.package-data]
-oxrpy = ["py.typed"]
+oxrpy = ["py.typed", "*.pyi"]

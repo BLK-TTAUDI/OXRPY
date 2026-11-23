@@ -14,13 +14,16 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from ._base import BaseClient, ServerData, _decode, _Spec, logger
+from ._base import MAX_BATCH, BaseClient, ServerData, _decode, _Spec, logger
 from .errors import OxfordAPIError, RateLimitError
-from .events import ordered_entries
+from .events import ServerWatcher, dispatch_plan
 from .follower import _FollowerBase
+from ._signatures import AsyncSignatures
+from .types import Ban, CommandResult, CommandStatus
 from .ratelimit import AsyncTokenBucket
+from .sync import CommandWindow, chunk
 
 try:
     import httpx
@@ -28,7 +31,7 @@ except ImportError:  # pragma: no cover - checked when the client is created
     httpx = None  # type: ignore[assignment]
 
 
-class AsyncOxfordAPI(BaseClient):
+class AsyncOxfordAPI(AsyncSignatures, BaseClient):
     """Async client for the Oxford Response private server API. Takes the same arguments as
     :class:`~oxrpy.OxfordAPI`, except ``client`` (your own ``httpx.AsyncClient``) in place
     of ``session``.
@@ -45,6 +48,7 @@ class AsyncOxfordAPI(BaseClient):
         self._owns_client = client is None
         self.client = client if client is not None else httpx.AsyncClient()
         self._stop = asyncio.Event()
+        self._command_window = CommandWindow()
 
     # ------------------------------------------------------------------ transport
 
@@ -94,9 +98,46 @@ class AsyncOxfordAPI(BaseClient):
 
         return run()
 
+    def _ready(self, value: Any) -> Any:
+        async def done() -> Any:
+            return value
+
+        return done()
+
+    # ------------------------------------------------------------------ many commands
+
+    async def run_many(self, commands: Sequence[str], *, check: bool = False) -> List[CommandResult]:
+        """Run any number of commands, in order, as fast as the game allows (batches of 10,
+        staying under 15 every 10 seconds). Same as :meth:`OxfordAPI.run_many`."""
+        commands = list(commands)
+        results: List[CommandResult] = []
+        for batch in chunk(commands, MAX_BATCH):
+            wait = self._command_window.wait_time(len(batch))
+            if wait:
+                logger.info("Waiting %.1fs to stay under the game's command limit", wait)
+                await asyncio.sleep(wait)
+            batch_results = await self.run_commands(batch, check=check)
+            self._command_window.record(len(batch))
+            results.extend(batch_results)
+        return results
+
+    async def sync_staff(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False
+                         ) -> List[Tuple[str, CommandResult]]:
+        """Make the staff match ``desired``, sending only the changes. Same as
+        :meth:`OxfordAPI.sync_staff`."""
+        commands = await self.plan_staff_sync(desired, remove_others=remove_others)
+        return list(zip(commands, await self.run_many(commands)))
+
+    async def sync_group(self, group: str, members: Iterable[Any], *, remove_others: bool = True
+                         ) -> List[Tuple[str, CommandResult]]:
+        """Make ``group`` contain exactly ``members``, sending only the changes. Same as
+        :meth:`OxfordAPI.sync_group`."""
+        commands = await self.plan_group_sync(group, members, remove_others=remove_others)
+        return list(zip(commands, await self.run_many(commands)))
+
     # ------------------------------------------------------------------ loops
 
-    async def iter_bans(self, page_size: int = 1000) -> AsyncIterator[dict]:
+    async def iter_bans(self, page_size: int = 1000) -> AsyncIterator[Ban]:
         """``async for ban in api.iter_bans():`` every ban, fetching pages as needed."""
         offset = 0
         while True:
@@ -108,7 +149,7 @@ class AsyncOxfordAPI(BaseClient):
             if not bans or offset >= (page.get("Total") or 0):
                 return
 
-    async def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> dict:
+    async def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> CommandStatus:
         """Poll :meth:`get_command` until it's no longer ``pending`` (gives up after ``timeout``)."""
         deadline = time.monotonic() + timeout
         while True:
@@ -141,15 +182,12 @@ class AsyncOxfordAPI(BaseClient):
         follower = AsyncLogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
                                     cursor=cursor)
         skip = skip_existing and cursor is None
+        watcher = ServerWatcher()
         self._stop.clear()
         async for data, new in follower.iter(stop=self._stop, on_error=self._dispatch_error):
-            if not skip:
-                for log, entry in ordered_entries(new):
-                    for fn in self._handlers.for_entry(log, entry):
-                        await self._safely(fn, entry)
+            for fn, arg in dispatch_plan(self._handlers, watcher, data, new, skip):
+                await self._safely(fn, arg)
             skip = False
-            for fn in self._handlers.get("poll"):
-                await self._safely(fn, data)
         self.cursor = follower.cursor
 
     def stop(self) -> None:

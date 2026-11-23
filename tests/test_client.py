@@ -56,7 +56,7 @@ TOP = {"Online": True, "LastHeartbeat": 100, "NextHeartbeat": 101, "Cursor": 50,
 
 
 def test_version_and_exports():
-    assert oxrpy.__version__ == "2.1.0"
+    assert oxrpy.__version__ == "2.2.0"
     from oxrpy.oxrpy import OxfordAPI as Legacy  # 1.x import path
     assert Legacy is OxfordAPI
 
@@ -72,7 +72,7 @@ def test_headers_with_app_key():
     h = s.calls[0]["headers"]
     assert h["server-key"] == "sk_test"
     assert h["Authorization"] == "Bearer oxa_abc"
-    assert h["User-Agent"].startswith("oxrpy/2.1.0")
+    assert h["User-Agent"].startswith("oxrpy/2.2.0")
 
 
 def test_no_authorization_header_without_app_key():

@@ -24,8 +24,43 @@ TYPE_LOGS = {
     "shot": "Shots",
 }
 
+#: Server state changes, worked out by comparing one poll with the last.
+STATE_EVENTS = ("ServerOnline", "ServerOffline", "ServerRestart")
+
 #: Special keys that aren't entries.
-SPECIAL = ("poll", "error")
+SPECIAL = ("poll", "error") + tuple(name.lower() for name in STATE_EVENTS)
+
+
+class ServerWatcher:
+    """Spots the server coming online, going offline or restarting between polls.
+
+    ``ServerRestart`` fires when ``Server.StartedAt`` (or ``JobId``) changes, which means live
+    data started over. A restart usually also gives ``ServerOffline`` then ``ServerOnline``,
+    unless it happened between two polls.
+    """
+
+    def __init__(self) -> None:
+        self.online: Any = None
+        self.instance: Any = None
+
+    def update(self, data: Dict[str, Any]) -> List[str]:
+        """Record this poll and return the state events it causes (none on the first poll)."""
+        online = bool(data.get("Online"))
+        server = data.get("Server") or {}
+        instance = server.get("StartedAt") or server.get("JobId")
+        first = self.online is None
+        events: List[str] = []
+        if not first:
+            if online and not self.online:
+                events.append("ServerOnline")
+            elif not online and self.online:
+                events.append("ServerOffline")
+            if online and instance is not None and self.instance is not None and instance != self.instance:
+                events.append("ServerRestart")
+        self.online = online
+        if instance is not None:
+            self.instance = instance
+        return events
 
 
 class Handlers:
@@ -71,6 +106,25 @@ class Handlers:
             if TYPE_LOGS.get(entry_type, "Events") == log:
                 fns.extend(fn for fn in self._by_key.get(entry_type, ()) if fn not in fns)
         return fns
+
+
+def dispatch_plan(
+    handlers: Handlers,
+    watcher: ServerWatcher,
+    data: Dict[str, Any],
+    new: Dict[str, List[dict]],
+    skip_entries: bool,
+) -> List[Tuple[Callable[..., Any], Any]]:
+    """Every ``(handler, argument)`` call one poll should make, in order: state changes,
+    then entries oldest first, then ``poll`` handlers."""
+    calls: List[Tuple[Callable[..., Any], Any]] = []
+    for name in watcher.update(data):
+        calls.extend((fn, data) for fn in handlers.get(name))
+    if not skip_entries:
+        for log, entry in ordered_entries(new):
+            calls.extend((fn, entry) for fn in handlers.for_entry(log, entry))
+    calls.extend((fn, data) for fn in handlers.get("poll"))
+    return calls
 
 
 def ordered_entries(new: Dict[str, List[dict]]) -> List[Tuple[str, dict]]:

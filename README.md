@@ -18,7 +18,7 @@ You'll need Python 3.10 or newer.
 > **Upgrading from 1.x?** Oxford is switching off the old endpoints (`/v1/server/players`,
 > `/v1/server/vehicles` and so on) on **1 January 2027**. Version 2 uses the new API, so it'll
 > keep working after that. The data comes back in a different format, though, so check
-> [CHANGELOG.md](CHANGELOG.md) before you upgrade.
+> [the changelog](https://github.com/BLK-TTAUDI/OXRPY/blob/main/CHANGELOG.md) before you upgrade.
 
 ## Getting started
 
@@ -93,6 +93,31 @@ There's also a helper for each section: `get_server`, `is_online`, `get_players`
 Each helper makes its own request, and you only get one of these a second with a server key.
 If you need a few sections at once, ask for them all in one `get_server_data()` call.
 
+`get_catalogue()` is the exception. The Catalogue is big and only changes when the game
+updates, so oxrpy keeps a copy for an hour and hands that back instead of asking again. Pass
+`refresh=True` to get a fresh one.
+
+### Autocomplete
+
+Your editor knows the shape of everything the API sends back, so it suggests field names as
+you type and flags typos before you run anything:
+
+```python
+for player in api.get_players() or []:
+    player["Usernmae"]     # your editor flags this: did you mean "Username"?
+```
+
+This works in VS Code, PyCharm and anything else that understands Python type hints, with both
+the normal and async clients. The data is still plain dicts, so nothing changes when your code
+runs. If you want to use the types in your own code, they're in `oxrpy.types`:
+
+```python
+from oxrpy.types import Player, Vehicle
+
+def describe(player: Player) -> str:
+    return f'{player["Username"]} ({player.get("Team")})'
+```
+
 ## Following logs as they happen
 
 `follow()` keeps checking the logs for you and only hands you entries you haven't seen yet,
@@ -159,6 +184,19 @@ You can listen for:
 - `"poll"`, which gets the whole response after every request. Pass
   `run_forever(sections=["Players"])` to have live data in it too.
 - `"error"`, which gets the exception when a request fails and is about to be retried.
+- `"ServerOnline"`, `"ServerOffline"` and `"ServerRestart"`, which get the whole response when
+  the server comes up, goes down, or restarts. A restart means live data started over; logs
+  carry on.
+
+```python
+@api.on("ServerOffline")
+def went_down(data):
+    print("The server is offline")
+
+@api.on("ServerOnline")
+def came_back(data):
+    print(data["Server"]["Name"], "is back up")
+```
 
 oxrpy works out which logs to ask for from your handlers. Entries arrive oldest first. By
 default, `run_forever()` ignores whatever was already in the logs when it started, so you don't
@@ -224,6 +262,54 @@ The full set:
   `start_callout`, `ambulance_callout`, `list_callouts` and `stop_fires`.
 - **Server:** `set_setting`, `new_join_code`, `queue_remove`, `queue_front`,
   `clear_placeables` and `shutdown`.
+
+### Lots of commands at once
+
+`run_many()` sends any number of commands in order. It batches them 10 at a time and waits
+when it needs to, so you stay under the game's limit of 15 commands every 10 seconds:
+
+```python
+api.run_many([f"pm {user_id} Training starts in 5 minutes" for user_id in trainees])
+```
+
+### Keeping staff and groups in sync
+
+If your staff ranks or groups should match something else, like Discord roles or a database,
+tell oxrpy what they should be and it sends only the changes:
+
+```python
+# Roblox user ID -> rank name (or None to take them off the staff)
+api.sync_staff({81234401: "Mod", 81239912: "Senior Moderator", 77001200: None})
+
+# Make a group contain exactly these user IDs
+api.sync_group("CID", [81234401, 81239912])
+
+# See what it would do first, without sending anything
+print(api.plan_staff_sync({81234401: "Admin"}))     # ['rank 81234401 admin']
+```
+
+It uses user IDs rather than usernames, because a name can change or match the wrong person.
+It never touches the owner. `sync_staff` leaves alone any staff you didn't mention, unless you
+pass `remove_others=True`. `sync_group` does remove anyone not in your list, unless you pass
+`remove_others=False`.
+
+## Putting things on the map
+
+Oxford publishes [a map image](https://docs.oxfd.re/map-march.png) of the whole map.
+`oxrpy.map` converts API positions to pixels on it:
+
+```python
+from oxrpy.map import to_pixels, from_pixels, distance, nearest
+
+px, py = to_pixels(player["Position"])                            # on the full-size image
+px, py = to_pixels(player["Position"], width=1630, height=1260)   # on a resized copy
+
+x, z = from_pixels(800, 600, width=1630, height=1260)    # a click on your map -> game position
+api.create_incident("Police", 1, x, z, "Reported disturbance")
+
+distance(player["Position"], vehicle["Position"])        # studs, ignoring height
+nearest(player["Position"], api.get_catalogue()["Map"]["Places"])   # nearest named place
+```
 
 ## Async (discord.py and friends)
 
@@ -321,6 +407,34 @@ Want to know if the API itself is up?
 api.get_status()   # {"Status": "operational", "UptimeSeconds": ..., "LastHour": {...}, "Uptime": {...}}
 ```
 
+## From the command line
+
+Installing oxrpy also gives you an `oxrpy` command for quick checks:
+
+```
+oxrpy status       # is the Oxford API up? (no key needed)
+oxrpy server       # your server's name, player count, join code and packages
+oxrpy players      # who's in your server
+```
+
+`server` and `players` read your key from the `OXFD_SERVER_KEY` environment variable. Add
+`--json` to any of them to get the raw data.
+
+## Examples
+
+The [examples folder](https://github.com/BLK-TTAUDI/OXRPY/tree/main/examples) has scripts you
+can copy and run:
+
+- [join_leave_log.py](https://github.com/BLK-TTAUDI/OXRPY/blob/main/examples/join_leave_log.py)
+  prints joins, leaves, kills and the server going up or down.
+- [discord_kill_feed.py](https://github.com/BLK-TTAUDI/OXRPY/blob/main/examples/discord_kill_feed.py)
+  is a Discord bot that posts kills to a channel and answers `!players`.
+- [discord_server_status.py](https://github.com/BLK-TTAUDI/OXRPY/blob/main/examples/discord_server_status.py)
+  is a Discord bot that posts when the server goes offline, comes back or restarts, and shows
+  the player count as its status.
+- [sync_staff_from_list.py](https://github.com/BLK-TTAUDI/OXRPY/blob/main/examples/sync_staff_from_list.py)
+  keeps staff ranks matching a list, and shows you the changes before making them.
+
 ## License
 
-Proprietary. See [LICENSE](LICENSE).
+Proprietary. See the [LICENSE](https://github.com/BLK-TTAUDI/OXRPY/blob/main/LICENSE) file.

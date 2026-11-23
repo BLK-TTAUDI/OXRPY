@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.2.0
+
+Nothing in this release should break code written for 2.0 or 2.1.
+
+### New
+
+- **Autocomplete.** Editors now know the shape of everything the API returns, so they suggest
+  field names (`Username`, `SpeedMph`, `Wanted`…) and flag typos before you run your code. The
+  types are in `oxrpy.types` if you want them in your own code. At runtime it's all still
+  plain dicts.
+- **Server online, offline and restart events.** Handlers can listen for `"ServerOnline"`,
+  `"ServerOffline"` and `"ServerRestart"`.
+- **Staff and group sync.** `sync_staff({user_id: rank})` and `sync_group(name, user_ids)`
+  send only the changes needed. `plan_staff_sync` and `plan_group_sync` show those changes
+  without sending anything.
+- **`run_many()`** sends any number of commands, batching them and waiting when needed to stay
+  under the game's 15 commands every 10 seconds.
+- **Map helpers.** `oxrpy.map` converts positions to pixels on Oxford's map image and back,
+  and works out distances and the nearest place.
+- **Catalogue caching.** `get_catalogue()` keeps a copy for an hour. Pass `refresh=True` to
+  fetch a new one.
+- **Command line.** `oxrpy status`, `oxrpy server` and `oxrpy players`.
+- **Examples.** Ready-to-run scripts in
+  [examples/](https://github.com/BLK-TTAUDI/OXRPY/tree/main/examples), including Discord bots
+  for a kill feed and server status.
+
+### Fixed
+
+- Return types are back in your editor. In 2.1.0, every method showed up as returning `Any`.
+- The changelog and license links on the PyPI page work now. They used to point at files
+  PyPI doesn't have.
+- The source download on PyPI no longer includes the tests.
+
 ## 2.1.0
 
 Nothing in this release should break code written for 2.0.

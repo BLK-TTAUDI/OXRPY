@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable, Iterator, Optional, Sequence
+from typing import Any, Callable, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 import requests
 
@@ -25,12 +25,15 @@ from ._base import (  # noqa: F401  (re-exported for 2.0 imports)
     logger,
 )
 from .errors import OxfordAPIError, RateLimitError
-from .events import ordered_entries
+from .events import ServerWatcher, dispatch_plan
 from .follower import LogFollower
+from ._signatures import SyncSignatures
+from .types import Ban, CommandResult, CommandStatus
 from .ratelimit import TokenBucket
+from .sync import CommandWindow, chunk
 
 
-class OxfordAPI(BaseClient):
+class OxfordAPI(SyncSignatures, BaseClient):
     """Client for the Oxford Response private server API (https://docs.oxfd.re).
 
     For asyncio code (discord.py and the like) use :class:`~oxrpy.AsyncOxfordAPI`, which has
@@ -59,6 +62,7 @@ class OxfordAPI(BaseClient):
         self.session = session or requests.Session()
         self.session.headers.update(self.headers)
         self._stop = threading.Event()
+        self._command_window = CommandWindow()
 
     # ------------------------------------------------------------------ transport
 
@@ -102,9 +106,51 @@ class OxfordAPI(BaseClient):
         value = self._execute(spec)
         return transform(value) if transform is not None else value
 
+    def _ready(self, value: Any) -> Any:
+        return value
+
+    # ------------------------------------------------------------------ many commands
+
+    def run_many(self, commands: Sequence[str], *, check: bool = False) -> List[CommandResult]:
+        """Run any number of commands, in order, as fast as the game allows.
+
+        Sends them in batches of up to 10 and waits when needed to stay under the game's
+        15 commands every 10 seconds. Returns one result per command, in the same order.
+        With ``check=True`` it stops at the first failed command and raises
+        :class:`CommandFailedError`.
+        """
+        commands = list(commands)
+        results: List[CommandResult] = []
+        for batch in chunk(commands, MAX_BATCH):
+            wait = self._command_window.wait_time(len(batch))
+            if wait:
+                logger.info("Waiting %.1fs to stay under the game's command limit", wait)
+                time.sleep(wait)
+            batch_results = self.run_commands(batch, check=check)
+            self._command_window.record(len(batch))
+            results.extend(batch_results)
+        return results
+
+    def sync_staff(self, desired: Mapping[Any, Optional[str]], *, remove_others: bool = False
+                   ) -> List[Tuple[str, CommandResult]]:
+        """Make the staff match ``desired`` (user ID -> rank, or ``None`` to remove), sending
+        only the changes. Returns ``(command, result)`` pairs; an empty list means nothing
+        needed changing. Use :meth:`plan_staff_sync` to see the commands without running them.
+
+        ``remove_others=True`` also unranks staff not in ``desired`` (never the owner)."""
+        commands = self.plan_staff_sync(desired, remove_others=remove_others)
+        return list(zip(commands, self.run_many(commands)))
+
+    def sync_group(self, group: str, members: Iterable[Any], *, remove_others: bool = True
+                   ) -> List[Tuple[str, CommandResult]]:
+        """Make ``group`` (name or Id) contain exactly ``members`` (user IDs), sending only the
+        changes. Returns ``(command, result)`` pairs. ``remove_others=False`` only adds."""
+        commands = self.plan_group_sync(group, members, remove_others=remove_others)
+        return list(zip(commands, self.run_many(commands)))
+
     # ------------------------------------------------------------------ loops
 
-    def iter_bans(self, page_size: int = 1000) -> Iterator[dict]:
+    def iter_bans(self, page_size: int = 1000) -> Iterator[Ban]:
         """Yield every ban, fetching pages as needed."""
         offset = 0
         while True:
@@ -115,7 +161,7 @@ class OxfordAPI(BaseClient):
             if not bans or offset >= (page.get("Total") or 0):
                 return
 
-    def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> dict:
+    def wait_for_command(self, command_id: str, *, timeout: float = 130, interval: float = 2) -> CommandStatus:
         """Poll :meth:`get_command` until it's no longer ``pending`` (gives up after ``timeout``)."""
         deadline = time.monotonic() + timeout
         while True:
@@ -155,15 +201,12 @@ class OxfordAPI(BaseClient):
         follower = LogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
                                cursor=cursor)
         skip = skip_existing and cursor is None
+        watcher = ServerWatcher()
         self._stop.clear()
         for data, new in follower.iter(stop=self._stop, on_error=self._dispatch_error):
-            if not skip:
-                for log, entry in ordered_entries(new):
-                    for fn in self._handlers.for_entry(log, entry):
-                        self._safely(fn, entry)
+            for fn, arg in dispatch_plan(self._handlers, watcher, data, new, skip):
+                self._safely(fn, arg)
             skip = False
-            for fn in self._handlers.get("poll"):
-                self._safely(fn, data)
         self.cursor = follower.cursor
 
     def stop(self) -> None:
