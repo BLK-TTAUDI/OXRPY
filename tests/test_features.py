@@ -232,7 +232,8 @@ def test_event_types_go_to_events_log():
     api.on("speedcamera", caught.append)
     api.on("poll", lambda d: api.stop() if caught else None)
     api.run_forever()
-    assert session.calls[0]["params"] == {"Events": "true"}
+    # The first poll only needs the newest entry, since what's already there is skipped
+    assert session.calls[0]["params"] == {"Events": "true", "Limit": "1"}
     assert [e["Seq"] for e in caught] == [2]
 
 

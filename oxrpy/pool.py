@@ -39,7 +39,7 @@ from . import types as t
 from ._base import BACKGROUND, BASE_URL, RequestInfo, ServerData
 from .aio import AsyncOxfordAPI, httpx
 from .events import Handlers
-from .follower import PERMANENT_ERRORS
+from .follower import PERMANENT_ERRORS, is_api_problem
 from .ratelimit import AsyncTokenBucket
 
 logger = logging.getLogger("oxrpy")
@@ -57,6 +57,101 @@ def _file_name(name: str) -> str:
     if safe != name:
         safe += "-" + hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
     return safe
+
+
+class _RecentCount:
+    """Events in the last ``seconds``, counted in one-second buckets: cheap however busy it gets."""
+
+    def __init__(self, seconds: int = 10) -> None:
+        self.seconds = seconds
+        self._buckets: Deque[List[int]] = deque()  # [second, count], oldest first
+
+    def add(self, now: Optional[float] = None) -> None:
+        second = int(time.monotonic() if now is None else now)
+        if self._buckets and self._buckets[-1][0] == second:
+            self._buckets[-1][1] += 1
+        else:
+            self._buckets.append([second, 1])
+            while self._buckets and self._buckets[0][0] <= second - self.seconds:
+                self._buckets.popleft()
+
+    def total(self, now: Optional[float] = None) -> int:
+        second = int(time.monotonic() if now is None else now)
+        return sum(count for at, count in self._buckets if at > second - self.seconds)
+
+
+class _OutageGate:
+    """Holds every server's polling back together while Oxford's API itself is down.
+
+    Without it each server would keep retrying on its own; with hundreds of servers that's
+    hundreds of failing requests, and the pool would only notice the API was back as each
+    server's own wait ran out. Instead, once most servers are failing together, polls wait here
+    and one at a time is let through as a probe (after 2 s, then 4, 8... up to a minute). The
+    first poll that works opens the gate for everyone.
+    """
+
+    MIN_DELAY = 2.0
+    MAX_DELAY = 60.0
+
+    def __init__(self) -> None:
+        self.delay = 0.0  # 0 while all is well
+        self.failures = 0
+        self._until = 0.0
+        self._probing = False
+        self._opened = asyncio.Event()
+        self._changed = asyncio.Event()
+
+    @property
+    def closed(self) -> bool:
+        return self.delay > 0
+
+    def succeeded(self) -> None:
+        self.failures = 0
+        if self.closed:
+            logger.warning("Oxford's API is answering again; carrying on")
+            self.delay = 0.0
+            self._probing = False
+            self._opened.set()
+            self._opened = asyncio.Event()
+            self._notify()
+
+    def failed(self, servers: int) -> None:
+        self.failures += 1
+        if self.closed:
+            if not self._probing:
+                return  # a poll that was already on its way when the gate closed
+            self._probing = False
+        elif self.failures < max(3, (servers + 1) // 2):
+            return
+        just_closed = not self.closed
+        self.delay = min(self.MAX_DELAY, max(self.MIN_DELAY, self.delay * 2))
+        self._until = time.monotonic() + self.delay
+        if just_closed:
+            self._notify()
+        logger.warning("Oxford's API looks down (%d failed polls in a row); trying again in %.0fs",
+                       self.failures, self.delay)
+
+    def _notify(self) -> None:
+        self._changed.set()
+        self._changed = asyncio.Event()
+
+    def changed(self) -> Awaitable[bool]:
+        """Finishes when the gate next closes (an outage is spotted) or opens (it's over). Starts
+        listening straight away, not when first awaited, so a change in between isn't missed."""
+        return self._changed.wait()
+
+    async def wait(self) -> None:
+        while self.closed:
+            remaining = self._until - time.monotonic()
+            if remaining <= 0:
+                self._until = time.monotonic() + self.delay  # this poll is the probe
+                self._probing = True
+                return
+            opened = self._opened
+            try:
+                await asyncio.wait_for(opened.wait(), remaining)
+            except asyncio.TimeoutError:
+                pass
 
 
 @dataclass
@@ -96,6 +191,8 @@ class PoolStats:
     requests_per_second: float
     #: Requests queued for a rate limit slot right now.
     waiting: int
+    #: True while Oxford's API looks down and the pool is holding polls back until it answers.
+    api_down: bool
     #: The average of the servers' ``interval``: typical seconds between updates.
     average_interval: Optional[float]
     #: The longest ``interval``: the most out of date any server gets.
@@ -153,7 +250,8 @@ class AsyncServerPool:
         #: Servers whose polling stopped for good (e.g. their key was regenerated), with the error.
         self.failed: Dict[str, Exception] = {}
         self._stats: Dict[str, ServerStats] = {}
-        self._sent: Deque[float] = deque(maxlen=100_000)
+        self._sent = _RecentCount()
+        self._outage = _OutageGate()
 
     # ------------------------------------------------------------------ servers
 
@@ -178,12 +276,13 @@ class AsyncServerPool:
         if self._shared_limiters is not None:
             api._limiters = self._shared_limiters
         api._ip_bucket = self._ip_bucket
+        api._gate = self._outage.wait
         api.on_request(self._count_request)
         return api
 
     def _count_request(self, info: RequestInfo) -> None:
         if info.status is not None:
-            self._sent.append(time.monotonic())
+            self._sent.add()
 
     async def verify(self, server_key: str) -> t.ServerInfo:
         """Check a server key before you save it, e.g. in a ``/link`` command. Returns the
@@ -403,12 +502,17 @@ class AsyncServerPool:
             stats.last_poll = now
             stats.polls += 1
             stats.errors = 0
+            self._outage.succeeded()
             stats.online = bool(data.get("Online"))
             server = data.get("Server")
             stats.players = server.get("CurrentPlayers") if isinstance(server, dict) else None
 
         async def poll_failed(exc: Exception) -> None:
             stats.errors += 1
+            if is_api_problem(exc):
+                self._outage.failed(sum(1 for task in self._tasks.values() if not task.done()))
+            else:
+                self._outage.succeeded()  # the API answered (e.g. "server offline"), so it's up
 
         try:
             await api._run(
@@ -424,10 +528,16 @@ class AsyncServerPool:
                 on_poll=polled,
                 adaptive=options.get("adaptive", True),
                 max_idle=options.get("max_idle", 5.0),
+                # The outage gate does the long waiting, so a server comes back soon after the API.
+                max_api_error_delay=5.0,
+                # A server waiting after an error goes again as soon as an outage is spotted
+                # (to wait at the gate) or is over.
+                wake=self._outage.changed,
             )
         except asyncio.CancelledError:
             raise
         except PERMANENT_ERRORS as exc:
+            self._outage.succeeded()  # the API answered, so it's up
             logger.error("Stopped following %s: %s", name, exc)
             self.failed[name] = stats.failed = exc
             await self._report(name, exc)
@@ -467,8 +577,7 @@ class AsyncServerPool:
             stats = pool.stats
             print(f"{stats.following} servers, updated about every {stats.average_interval:.1f}s")
         """
-        now = time.monotonic()
-        recent = sum(1 for sent in self._sent if sent >= now - 10)
+        recent = self._sent.total()
         intervals = [s.interval for s in self._stats.values() if s.interval is not None and s.failed is None]
         buckets = [b for b in ((self._shared_limiters or {}).get("data"), self._ip_bucket) if b is not None]
         following = sum(1 for name, task in self._tasks.items() if not task.done() and name not in self.failed)
@@ -479,6 +588,7 @@ class AsyncServerPool:
             read_limit=self.read_limit,
             requests_per_second=recent / 10,
             waiting=max((b.waiting for b in buckets), default=0),
+            api_down=self._outage.closed,
             average_interval=sum(intervals) / len(intervals) if intervals else None,
             slowest_interval=max(intervals) if intervals else None,
             per_server={name: ServerStats(**vars(s)) for name, s in self._stats.items()},

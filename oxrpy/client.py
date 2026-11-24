@@ -287,6 +287,8 @@ class OxfordAPI(SyncSignatures, BaseClient):
         follower = LogFollower(self, self._handlers.logs_needed(), sections=sections, limit=limit,
                                cursor=cursor, save_to=save_to, adaptive=adaptive, max_idle=max_idle)
         skip = skip_existing and follower.cursor is None
+        if skip:
+            follower.skip_backlog()
         watcher = ServerWatcher()
         self._stop.clear()
         for data, new in follower.iter(stop=self._stop, on_error=self._dispatch_error):

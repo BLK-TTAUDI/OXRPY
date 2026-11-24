@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+Nothing in this release should break existing code.
+
+- **Outages handled together:** when Oxford's API itself goes down, `AsyncServerPool` notices
+  (most servers failing at once), holds every server's polling back, and checks with one request
+  at a time (after 2s, then 4, 8... up to a minute). The first answer lets everyone carry on
+  straight away. `pool.stats.api_down` shows when it's waiting. Before, every server retried on
+  its own, and could take up to a minute after the API came back to notice.
+- **Lighter start:** the first poll of `run_forever` (and the pool) only asks for the newest
+  entry of each log when what's there would be skipped anyway. Much less to download when an
+  app starts up with hundreds of servers. A `"poll"` handler sees just that one entry per log on
+  the first poll.
+- **Background polls report failures straight away**, rather than retrying inside the request
+  first; the poll loop does the retrying.
+- **Faster bookkeeping** for large pools: request counts and the JavaScript version's queues no
+  longer slow down with thousands of servers.
+- `scripts/release.py`: one command to check, bump, test, commit, tag and publish a release.
+
 ## 2.5.0
 
 Nothing in this release should break existing code.

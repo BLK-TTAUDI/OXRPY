@@ -29,6 +29,14 @@ PERMANENT_ERRORS = (AuthenticationError, BadRequestError, NotFoundError, Endpoin
 MAX_ERROR_DELAY = 60.0
 
 
+def is_api_problem(exc: Exception) -> bool:
+    """A problem with Oxford's API itself (unreachable, timing out, or a 5xx other than 503,
+    which means the game server's offline), rather than with one server or its key."""
+    if not isinstance(exc, OxfordAPIError) or isinstance(exc, RateLimitError):
+        return False
+    return exc.status is None or (exc.status >= 500 and exc.status != 503)
+
+
 def error_delay(exc: OxfordAPIError, failures: int) -> float:
     """How long to wait after the ``failures``-th failure in a row."""
     if isinstance(exc, RateLimitError) and exc.retry_after:
@@ -65,6 +73,14 @@ class _FollowerBase:
         self.last: Optional[ServerData] = None
         self.failures = 0
         self.store = as_store(save_to)
+        #: The longest wait after an API problem (see :func:`is_api_problem`). The pool lowers it,
+        #: because it watches for outages itself and holds every server back together.
+        self.max_api_error_delay = MAX_ERROR_DELAY
+        # Ask for just the newest entry of each log next time (set by skip_backlog()).
+        self._light = False
+        #: Awaited alongside the wait after an error: when it finishes, the wait is cut short.
+        #: The pool uses it to wake servers as soon as an outage is spotted or is over.
+        self.wake: Optional[Callable[[], Any]] = None
         #: True if the position was loaded from ``save_to``.
         self.resumed = False
         if self.store is not None and cursor is None:
@@ -84,8 +100,16 @@ class _FollowerBase:
             except Exception:  # noqa: BLE001 - a failed save shouldn't stop the bot
                 logger.exception("Couldn't save the position to %r", self.store)
 
+    def skip_backlog(self) -> None:
+        """Make the first poll fetch only the newest entry of each log: enough to know where
+        each log is up to, when what's already there won't be handled anyway. Much less to
+        download, which adds up for an app starting hundreds of servers."""
+        if self.cursor is None and self.logs:
+            self._light = True
+
     def _request_args(self) -> Tuple[List[str], Dict[str, Any]]:
-        return [*self.logs, *self.sections], {"since": self.cursor, "limit": self.limit}
+        limit = 1 if self._light else self.limit
+        return [*self.logs, *self.sections], {"since": self.cursor, "limit": limit}
 
     def _process(self, data: ServerData) -> Dict[str, List[dict]]:
         new: Dict[str, List[dict]] = {}
@@ -104,6 +128,7 @@ class _FollowerBase:
             self.cursor = data["Cursor"]
         self.last = data
         self.failures = 0
+        self._light = False
         self.quiet_polls = 0 if any(new.values()) else self.quiet_polls + 1
         return new
 
@@ -112,6 +137,8 @@ class _FollowerBase:
             raise exc
         self.failures += 1
         delay = error_delay(exc, self.failures)
+        if is_api_problem(exc):
+            delay = min(delay, self.max_api_error_delay)
         logger.warning("Polling failed (%s); trying again in %.0fs", exc, delay)
         return delay
 

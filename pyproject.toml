@@ -22,7 +22,7 @@ dependencies = ["requests>=2.32.4"]  # 2.32.4 fixes CVE-2024-47081 (credential l
 
 [project.optional-dependencies]
 async = ["httpx>=0.27"]
-test = ["pytest>=7", "httpx>=0.27"]
+test = ["pytest>=7", "pytest-cov>=5", "httpx>=0.27"]
 
 [project.scripts]
 oxrpy = "oxrpy.__main__:main"
@@ -43,3 +43,7 @@ version = { attr = "oxrpy.__version__" }
 
 [tool.setuptools.package-data]
 oxrpy = ["py.typed", "*.pyi"]
+
+[tool.coverage.report]
+# Raise this as coverage goes up; CI fails below it.
+fail_under = 88

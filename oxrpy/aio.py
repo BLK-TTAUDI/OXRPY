@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from ._base import BACKGROUND, BASE_URL, MAX_BATCH, BaseClient, ServerData, _apply_change, _decode, _setting_to_change, _Spec, logger
 from .errors import OxfordAPIError, RateLimitError
@@ -73,6 +73,9 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         self.client = client if client is not None else httpx.AsyncClient()
         self._stop = asyncio.Event()
         self._command_window = CommandWindow()
+        # Awaited before each background poll (AsyncServerPool holds polls back while Oxford's
+        # API is down).
+        self._gate: Optional[Callable[[], Awaitable[None]]] = None
 
     # ------------------------------------------------------------------ transport
 
@@ -86,6 +89,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         # it takes: with thousands of servers on one limit, a long queue is expected.
         background = BACKGROUND.get()
         priority, wait_limit = (1, None) if background else (0, 60.0)
+        if background and self._gate is not None:
+            await self._gate()
         while True:
             if bucket is not None and not await bucket.acquire(timeout=wait_limit, priority=priority):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
@@ -103,7 +108,9 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
                     follow_redirects=False,
                 )
             except httpx.HTTPError as exc:
-                delay = self._network_retry_delay(spec, attempt)
+                # Background polls don't retry here: the poll loop does, and the pool needs to
+                # hear about failures straight away to spot an outage.
+                delay = None if background else self._network_retry_delay(spec, attempt)
                 self._after_attempt(spec, None, {}, time.monotonic() - started, attempt, exc, delay is not None)
                 if delay is None:
                     raise self._network_error(spec, exc, isinstance(exc, httpx.TimeoutException)) from exc
@@ -113,6 +120,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
 
             body = _decode(response.content)
             delay = self._response_retry_delay(spec, response.status_code, response.headers, body, attempt)
+            if background and response.status_code != 429:
+                delay = None
             self._after_attempt(spec, response.status_code, response.headers, time.monotonic() - started,
                                 attempt, None, delay is not None)
             if delay is not None:
@@ -280,12 +289,19 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         on_poll: Optional[Callable[[ServerData], Any]] = None,
         adaptive: bool = False,
         max_idle: float = 5.0,
+        max_api_error_delay: Optional[float] = None,
+        wake: Optional[Callable[[], Any]] = None,
     ) -> None:
         """The polling loop behind :meth:`run_forever` (and :class:`~oxrpy.AsyncServerPool`).
         ``invoke(fn, arg)`` calls one handler; ``on_poll(data)`` is told about each poll."""
         follower = AsyncLogFollower(self, handlers.logs_needed(), sections=sections, limit=limit,
                                     cursor=cursor, save_to=save_to, adaptive=adaptive, max_idle=max_idle)
         skip = skip_existing and follower.cursor is None
+        if skip:
+            follower.skip_backlog()
+        if max_api_error_delay is not None:
+            follower.max_api_error_delay = max_api_error_delay
+        follower.wake = wake
         watcher = ServerWatcher()
 
         async def call(fn: Callable[..., Any], arg: Any) -> None:
@@ -356,14 +372,19 @@ class AsyncLogFollower(_FollowerBase):
     ) -> AsyncIterator[Tuple[ServerData, Dict[str, List[dict]]]]:
         """Poll until ``stop`` is set (or forever). With ``retry=False`` the first error is raised."""
 
-        async def wait(seconds: float) -> None:
-            if stop is None:
+        async def wait(seconds: float, wake: Optional[Callable[[], Any]] = None) -> None:
+            """Sleep, until ``stop`` is set, or (after an error) until ``wake`` says to stop waiting."""
+            ends = [asyncio.ensure_future(stop.wait())] if stop is not None else []
+            if wake is not None:
+                ends.append(asyncio.ensure_future(wake()))
+            if not ends:
                 await asyncio.sleep(seconds)
                 return
             try:
-                await asyncio.wait_for(stop.wait(), timeout=seconds)
-            except asyncio.TimeoutError:
-                pass
+                await asyncio.wait(ends, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for end in ends:
+                    end.cancel()
 
         while stop is None or not stop.is_set():
             try:
@@ -374,7 +395,7 @@ class AsyncLogFollower(_FollowerBase):
                     result = on_error(exc)
                     if inspect.isawaitable(result):
                         await result
-                await wait(delay)
+                await wait(delay, self.wake)
                 continue
             if polled is None:
                 break

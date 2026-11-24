@@ -289,3 +289,124 @@ def test_stops_promptly_even_with_polls_queued(monkeypatch):
         assert pool.stats.waiting == 0
 
     asyncio.run(main())
+
+
+# ---------------------------------------------------------------- outages and the first poll
+
+def test_pool_waits_out_an_api_outage_together(monkeypatch):
+    """While Oxford's API is down, the pool holds every server back and sends one probe at a
+    time, instead of every server retrying on its own. The first answer lets everyone go."""
+    monkeypatch.setattr(oxrpy.pool._OutageGate, "MIN_DELAY", 0.2)
+    monkeypatch.setattr(oxrpy.follower._FollowerBase, "next_delay", lambda self, data=None, **kw: 0.02)
+    # The real waits after an error (2s, 4s...): servers are woken when the gate opens, not left asleep
+
+    async def main():
+        state = {"down": False, "failed": 0, "after": {}}
+
+        def handler(request):
+            if state["down"]:
+                state["failed"] += 1
+                return httpx.Response(502, json={"message": "Bad gateway"})
+            key = request.headers["server-key"]
+            state["after"][key] = state["after"].get(key, 0) + 1
+            return httpx.Response(200, json=TOP)
+
+        pool = pool_from(handler)
+        for i in range(20):
+            pool.add(f"s{i}", f"key-{i}")
+        pool.on("poll", lambda server, data: None)
+        runner = asyncio.create_task(pool.run_forever())
+        await asyncio.sleep(0.2)
+        state["down"] = True
+        await asyncio.sleep(1.0)
+        down_stats = pool.stats
+        failed_while_down = state["failed"]
+        state["down"], state["after"] = False, {}
+        await asyncio.sleep(1.0)
+        up_stats = pool.stats
+        pool.stop()
+        await runner
+
+        assert down_stats.api_down is True
+        # 20 servers retrying every 0.02s would be ~1,000 failures; held back, it's a few dozen
+        assert failed_while_down < 60
+        assert up_stats.api_down is False
+        assert len(state["after"]) == 20  # every server came back
+        assert not pool.failed
+
+    asyncio.run(main())
+
+
+def test_one_broken_server_doesnt_hold_the_others_back(monkeypatch):
+    monkeypatch.setattr(oxrpy.follower._FollowerBase, "next_delay", lambda self, data=None, **kw: 0.02)
+    monkeypatch.setattr(oxrpy.follower, "error_delay", lambda exc, n: 0.02)
+
+    async def main():
+        def handler(request):
+            if request.headers["server-key"] == "key-0":
+                return httpx.Response(500, json={"message": "Internal error"})
+            return httpx.Response(200, json=TOP)
+
+        pool = pool_from(handler)
+        for i in range(10):
+            pool.add(f"s{i}", f"key-{i}")
+        pool.on("poll", lambda server, data: None)
+        runner = asyncio.create_task(pool.run_forever())
+        await asyncio.sleep(0.5)
+        stats = pool.stats
+        pool.stop()
+        await runner
+        assert stats.api_down is False
+        assert stats.per_server["s1"].polls > 5
+
+    asyncio.run(main())
+
+
+def test_first_poll_only_fetches_the_newest_entry(monkeypatch):
+    monkeypatch.setattr(oxrpy.follower._FollowerBase, "next_delay", lambda self, data=None, **kw: 0.01)
+
+    async def main():
+        calls = []
+        replies = [
+            dict(TOP, Cursor=9, KillLogs=[{"Seq": 9, "Type": "Kill"}]),             # newest only
+            dict(TOP, Cursor=11, KillLogs=[{"Seq": 11, "Type": "Kill"}, {"Seq": 8, "Type": "Kill"}]),
+        ]
+
+        def handler(request):
+            calls.append(dict(request.url.params))
+            return httpx.Response(200, json=replies[min(len(calls), len(replies)) - 1])
+
+        api = fake(handler, rate_limit="none")
+        seen = []
+
+        @api.on("Kill")
+        def on_kill(kill):
+            seen.append(kill["Seq"])
+            api.stop()
+
+        await asyncio.wait_for(api.run_forever(), 5)
+        assert calls[0].get("Limit") == "1"
+        assert "Limit" not in calls[1] and calls[1]["Since"] == "9"
+        assert seen == [11]  # 8 was older than what the first poll saw, so it isn't news
+
+    asyncio.run(main())
+
+
+def test_resuming_from_a_saved_position_fetches_everything(tmp_path, monkeypatch):
+    monkeypatch.setattr(oxrpy.follower._FollowerBase, "next_delay", lambda self, data=None, **kw: 0.01)
+    path = tmp_path / "pos.json"
+    oxrpy.FileState(path).save({"Cursor": 5, "Handled": {}})
+
+    async def main():
+        calls = []
+
+        def handler(request):
+            calls.append(dict(request.url.params))
+            return httpx.Response(200, json=dict(TOP, Cursor=6, KillLogs=[{"Seq": 6, "Type": "Kill"}]))
+
+        api = fake(handler, rate_limit="none")
+        api.on("Kill", lambda kill: api.stop())
+        await asyncio.wait_for(api.run_forever(save_to=path), 5)
+        assert "Limit" not in calls[0] and calls[0]["Since"] == "5"
+
+    asyncio.run(main())
