@@ -33,6 +33,7 @@ Repository = "https://github.com/BLK-TTAUDI/OXRPY"
 Documentation = "https://oxrpy.org/"
 "Oxford API docs" = "https://docs.oxfd.re/"
 Changelog = "https://github.com/BLK-TTAUDI/OXRPY/blob/main/CHANGELOG.md"
+Funding = "https://buymeacoffee.com/blk_ttaudi"
 
 [tool.setuptools]
 packages = ["oxrpy"]

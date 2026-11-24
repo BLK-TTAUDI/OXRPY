@@ -604,6 +604,11 @@ can copy and run:
   keeps staff ranks matching a list, and shows you the changes before making them.
 
 <!-- --8<-- [end:examples] -->
+## Support
+
+oxrpy is free to use. If it's saved you some time, you can
+[buy me a coffee](https://buymeacoffee.com/blk_ttaudi) to help keep it going.
+
 <!-- --8<-- [start:license] -->
 ## License
 
