@@ -458,42 +458,75 @@ to close the connection cleanly.
 <!-- --8<-- [start:many-servers] -->
 ## Many servers in one app
 
-If you're building something lots of servers use (a bot, a CAD, a dashboard), each server's
-owner gives your app their server key. `AsyncServerPool` runs one set of handlers across all of
-them:
+If you're building something lots of servers use (a Discord bot, a CAD, a dashboard), each
+server's owner gives your app their server key. `AsyncServerPool` follows all of them with one set
+of handlers, and shares Oxford's rate limits between them fairly:
 
 ```python
 from oxrpy import AsyncServerPool
 
-pool = AsyncServerPool(app_key=os.environ["OXFD_APP_KEY"])   # app key optional
-pool.add("guild-1234", key_from_guild_1234)
-pool.add("guild-5678", key_from_guild_5678)
+pool = AsyncServerPool(app_key=os.environ.get("OXFD_APP_KEY"))   # app key optional
+
+# When someone links their server (a /link command, say), check the key first.
+info = await pool.verify(server_key)       # AuthenticationError if it's wrong
+pool.add("guild-1234", server_key)         # followed straight away if the pool's running
+print(f"Linked to {info['Name']}")
 
 @pool.on("Kill")
 async def on_kill(server, kill):           # the server's name comes first
     await post_to_guild(server, kill)
 
 @pool.on("error")
-async def on_error(server, exc):
-    print(f"{server}: {exc}")
+async def on_error(server, exc):           # e.g. the owner regenerated their key
+    await tell_guild(server, f"Lost touch with your server: {exc}")
 
-await pool.run_forever(save_dir="positions/")
+await pool.run_forever(sections=["Players"], save_dir="positions/")
 ```
 
-- With an app key, the pool paces every server's requests together. Your app's limits count
-  across all the servers it calls, so separate clients would trip over each other.
-- If an owner regenerates their key, that one server stops being followed. You hear about it
-  through your `error` handler and `pool.failed`, and every other server carries on.
-- You can `pool.add()` and `await pool.remove()` servers while it's running, for example when
-  someone links or unlinks their server.
-- `pool["guild-1234"]` is that server's normal async client, for reads and commands.
-- `await pool.each(lambda api: api.get_players())` and
-  `await pool.run_command_on_all("announce ...")` do something on every server at once.
-- `save_dir` keeps each server's position, so restarts don't miss anything.
-- Quiet servers are checked less often (up to every 5 seconds), and busy ones on every update.
-  That lets one app follow far more servers within its rate limit. Pass `adaptive=False` to
-  check every server on every update, or `max_idle=` to change the 5 seconds. A single client
-  can do the same with `run_forever(adaptive=True)`.
+- **Fair turns:** when there's more to check than the limit allows, servers take turns, so none
+  is left behind. Busy servers are checked more often than quiet and empty ones (which wait up to
+  5 seconds, or `max_idle=`).
+- **Your own requests first:** requests you make yourself, like a `/players` command's, go ahead
+  of background polling, so they stay quick however many servers the pool follows.
+  `pool.each()` and `pool.run_command_on_all()` wait behind them too.
+- **Reuse what the pool already has:** with `sections=["Players"]` every poll brings the player
+  list too, so `await pool["guild-1234"].get_players(max_age=10)` answers without a request.
+  Every live helper takes `max_age`.
+- **Bad keys don't spread:** a server whose key stops working is dropped, reported to your
+  `error` handler and listed in `pool.failed`. The others carry on. When the owner gives you a
+  new key, `await pool.update_key("guild-1234", new_key)` carries on from where it stopped.
+- **Add and remove while running:** `pool.add()` and `await pool.remove()` work at any time.
+- **Restarts don't miss anything:** `save_dir` keeps each server's place in its logs.
+- **Custom limits just work:** with an app key, the pool follows the limits Oxford reports, so a
+  higher tier needs no settings.
+- **See how it's keeping up:** `pool.stats` has overall figures and each server's:
+
+```python
+stats = pool.stats
+print(f"{stats.following} servers, each updated about every {stats.average_interval:.1f}s")
+print(stats.per_server["guild-1234"].interval, stats.read_limit, stats.waiting)
+```
+
+### How many servers can one app follow?
+
+Every request from one IP address counts towards Oxford's limit of 30 a second, whatever the key.
+With an app key, your app's own limit (20 a second on the standard tier) is shared by every
+server too. Each server needs one request per check, so the more servers, the longer each waits
+for its turn:
+
+| Servers | Each one checked about every (no app key) | (standard app key) |
+| --- | --- | --- |
+| up to 30 | 1 to 5 seconds, as often as it's useful | 1.5 to 5 seconds |
+| 100 | 3.5 seconds | 5 seconds |
+| 300 | 10 seconds | 15 seconds |
+| 1,000 | 35 seconds | 50 seconds |
+
+Nothing is missed when it's slower: each check picks up everything since the last one. It just
+arrives later. `pool.stats` shows the real figures for your app.
+
+To go further, ask Oxford Roleplay for an app key with higher limits (the pool picks them up by
+itself), or run your app on more than one IP address, each with its own share of the servers.
+An Unlimited app key isn't held to the per-IP limit: pass `rate_limit="none"` to turn pacing off.
 
 <!-- --8<-- [end:many-servers] -->
 <!-- --8<-- [start:app-keys] -->

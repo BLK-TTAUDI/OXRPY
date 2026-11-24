@@ -14,6 +14,7 @@ import json
 import logging
 import time
 import warnings
+from contextvars import ContextVar
 from dataclasses import dataclass
 from http import HTTPStatus
 from urllib.parse import quote, urlsplit
@@ -37,6 +38,10 @@ from . import lookup
 from .sync import plan_group_changes, plan_staff_changes
 
 logger = logging.getLogger("oxrpy")
+
+#: Set while a follower polls, so the async rate limiter can put requests you make yourself
+#: (a Discord command's lookup, say) ahead of background polling.
+BACKGROUND: "ContextVar[bool]" = ContextVar("oxrpy_background", default=False)
 
 BASE_URL = "https://api.oxfd.re/v1"
 
@@ -282,6 +287,8 @@ class BaseClient(CommandHelpers):
         if app_key:
             self.headers["Authorization"] = f"Bearer {app_key}"
         self._limiters = self._make_limiters(rate_limit)
+        # With an app key on "auto", follow the limits Oxford reports (custom tiers differ).
+        self._follow_limits = rate_limit == "auto" and self.has_app_key
         self._handlers = Handlers()
         self._catalogue_cache: Optional[Tuple[float, Any]] = None
         # An extra limit shared with other clients (AsyncServerPool sets it: 30/s per IP).
@@ -316,6 +323,16 @@ class BaseClient(CommandHelpers):
             return {k: bucket(1.0 / rate_limit, 1) for k in none}
         raise ValueError("rate_limit must be 'auto', 'none', None or a non-negative number")
 
+    def _adopt_limit(self, kind: str, limit: Optional[float]) -> None:
+        """Follow the steady rate Oxford reports (``X-RateLimit-Limit``), so an app key on a
+        custom tier gets its own limits without any settings."""
+        bucket = self._limiters.get(kind)
+        if bucket is None or not limit or limit <= 0 or abs(limit - bucket.rate) <= bucket.rate * 0.01:
+            return
+        burst = limit * (2.5 if kind == "command" else 2)
+        logger.info("Oxford reports a %s limit of %g a second; using it instead of %g", kind, limit, bucket.rate)
+        bucket.set_rate(limit, burst)
+
     # ------------------------------------------------------------------ retries and responses
 
     def _url(self, spec: _Spec) -> str:
@@ -344,6 +361,8 @@ class BaseClient(CommandHelpers):
         limits = _rate_limit_headers(headers) if status is not None else None
         if limits:
             self._rate_limits[spec.limiter] = {**limits, "At": time.time()}
+            if self._follow_limits:
+                self._adopt_limit(spec.limiter, limits.get("Limit"))
         if not self._request_hooks:
             return
         info = RequestInfo(spec.method, spec.path, status, elapsed, attempt, will_retry, error, limits)
@@ -499,11 +518,13 @@ class BaseClient(CommandHelpers):
             audit_category=audit_category, audit_user=audit_user, if_none_match=if_none_match,
         ))
 
-    def _section(self, name: str, *, default: Any = None, **kwargs: Any) -> Any:
+    def _section(self, name: str, *, default: Any = None, max_age: float = 0, **kwargs: Any) -> Any:
         def pick(data: Any) -> Any:
             value = data.get(name) if data else None
             return default if value is None and default is not None else value
 
+        if max_age > 0 and not kwargs:
+            return self._from_latest([name], max_age, pick)
         return self._call(self._server_data_spec(name, **kwargs), pick)
 
     def get_server(self) -> Any:
@@ -516,50 +537,80 @@ class BaseClient(CommandHelpers):
         return self._call(self._server_data_spec(), lambda d: bool(d and d.get("Online")))
 
     # Live
-    def get_players(self) -> Any:
-        """Everyone in the server (``None`` while offline)."""
-        return self._section("Players")
+    def get_players(self, *, max_age: float = 0) -> Any:
+        """Everyone in the server (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Players", max_age=max_age)
 
     def get_tracks(self) -> Any:
         """Per-second position samples since the last report (``None`` while offline)."""
         return self._section("Tracks")
 
-    def get_vehicles(self) -> Any:
-        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline)."""
-        return self._section("Vehicles")
+    def get_vehicles(self, *, max_age: float = 0) -> Any:
+        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline).
 
-    def get_world(self) -> Any:
-        """Weather, temperature, clock, locks, speed limit, sticky message, countdown."""
-        return self._section("World")
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Vehicles", max_age=max_age)
 
-    def get_teams(self) -> Any:
-        """Players, limits and access per team."""
-        return self._section("Teams")
+    def get_world(self, *, max_age: float = 0) -> Any:
+        """Weather, temperature, clock, locks, speed limit, sticky message, countdown.
 
-    def get_queue(self) -> Any:
-        """Who's waiting to join, front first (``None`` while offline)."""
-        return self._section("Queue")
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("World", max_age=max_age)
 
-    def get_robberies(self) -> Any:
-        """Robbery sites: state, stage, alarm, robbers (``None`` while offline)."""
-        return self._section("Robberies")
+    def get_teams(self, *, max_age: float = 0) -> Any:
+        """Players, limits and access per team.
 
-    def get_atms(self) -> Any:
-        """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
-        return self._section("Atms")
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Teams", max_age=max_age)
 
-    def get_incidents(self) -> Any:
-        """The control room: open incidents, units, operators, timeline."""
-        return self._section("Incidents")
+    def get_queue(self, *, max_age: float = 0) -> Any:
+        """Who's waiting to join, front first (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Queue", max_age=max_age)
+
+    def get_robberies(self, *, max_age: float = 0) -> Any:
+        """Robbery sites: state, stage, alarm, robbers (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Robberies", max_age=max_age)
+
+    def get_atms(self, *, max_age: float = 0) -> Any:
+        """ATMs: availability, alarm, who robbed them (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Atms", max_age=max_age)
+
+    def get_incidents(self, *, max_age: float = 0) -> Any:
+        """The control room: open incidents, units, operators, timeline.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Incidents", max_age=max_age)
 
     # Server
-    def get_staff(self) -> Any:
-        """``{ OwnerId, Staff: [...], Ranks: [...] }``."""
-        return self._section("Staff")
+    def get_staff(self, *, max_age: float = 0) -> Any:
+        """``{ OwnerId, Staff: [...], Ranks: [...] }``.
 
-    def get_groups(self) -> Any:
-        """The server's groups and their members (``[]`` without AdvancedServer)."""
-        return self._section("Groups")
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Staff", max_age=max_age)
+
+    def get_groups(self, *, max_age: float = 0) -> Any:
+        """The server's groups and their members (``[]`` without AdvancedServer).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+        return self._section("Groups", max_age=max_age)
 
     def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Any:
         """One page of bans: ``{ Total, Offset, List: [...] }``. See ``iter_bans``."""

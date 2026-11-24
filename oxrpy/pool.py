@@ -29,11 +29,14 @@ import hashlib
 import inspect
 import logging
 import re
+import time
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Iterator, List, Literal, Optional, Sequence, Tuple, TypeVar, Union, overload
+from typing import Any, Awaitable, Callable, Deque, Dict, Iterator, List, Literal, Optional, Sequence, Tuple, TypeVar, Union, overload
 
 from . import types as t
-from ._base import BASE_URL, ServerData
+from ._base import BACKGROUND, BASE_URL, RequestInfo, ServerData
 from .aio import AsyncOxfordAPI, httpx
 from .events import Handlers
 from .follower import PERMANENT_ERRORS
@@ -54,6 +57,51 @@ def _file_name(name: str) -> str:
     if safe != name:
         safe += "-" + hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
     return safe
+
+
+@dataclass
+class ServerStats:
+    """How one server in the pool is doing. See :attr:`AsyncServerPool.stats`."""
+
+    #: Successful polls since the server was added.
+    polls: int = 0
+    #: Failed polls in a row (0 while all is well).
+    errors: int = 0
+    #: Unix time of the last successful poll, or ``None`` before the first.
+    last_poll: Optional[float] = None
+    #: Seconds between polls lately: how out of date this server's events and data can be.
+    interval: Optional[float] = None
+    #: Whether the server was online at the last poll.
+    online: Optional[bool] = None
+    #: Players in the server at the last poll.
+    players: Optional[int] = None
+    #: Why following stopped for good (e.g. the key was regenerated), or ``None``.
+    failed: Optional[Exception] = None
+
+
+@dataclass
+class PoolStats:
+    """How the whole pool is doing: ``pool.stats``. Use it to check the pool keeps up, or to
+    tell your users how fresh their server's data is."""
+
+    #: Servers in the pool.
+    servers: int
+    #: Servers being followed right now (``run_forever`` running and not failed).
+    following: int
+    #: Servers whose following stopped for good.
+    failed: int
+    #: Reads a second the pool keeps to across every server, or ``None`` with no limit.
+    read_limit: Optional[float]
+    #: Requests sent a second, over the last 10 seconds.
+    requests_per_second: float
+    #: Requests queued for a rate limit slot right now.
+    waiting: int
+    #: The average of the servers' ``interval``: typical seconds between updates.
+    average_interval: Optional[float]
+    #: The longest ``interval``: the most out of date any server gets.
+    slowest_interval: Optional[float]
+    #: Each server's :class:`ServerStats`, by name.
+    per_server: Dict[str, ServerStats] = field(default_factory=dict)
 
 
 class AsyncServerPool:
@@ -104,6 +152,8 @@ class AsyncServerPool:
         self._run_options: Optional[Dict[str, Any]] = None
         #: Servers whose polling stopped for good (e.g. their key was regenerated), with the error.
         self.failed: Dict[str, Exception] = {}
+        self._stats: Dict[str, ServerStats] = {}
+        self._sent: Deque[float] = deque(maxlen=100_000)
 
     # ------------------------------------------------------------------ servers
 
@@ -114,12 +164,54 @@ class AsyncServerPool:
         name = str(name)
         if name in self._servers:
             raise ValueError(f"There's already a server called {name!r} in the pool")
+        api = self._client(server_key)
+        self._servers[name] = api
+        self._stats[name] = ServerStats()
+        self.failed.pop(name, None)
+        if self._run_options is not None:
+            self._start(name)
+        return api
+
+    def _client(self, server_key: str) -> AsyncOxfordAPI:
+        """A client for one server, sharing the pool's connections and rate limits."""
         api = AsyncOxfordAPI(server_key, client=self.client, **self._options)
         if self._shared_limiters is not None:
             api._limiters = self._shared_limiters
         api._ip_bucket = self._ip_bucket
+        api.on_request(self._count_request)
+        return api
+
+    def _count_request(self, info: RequestInfo) -> None:
+        if info.status is not None:
+            self._sent.append(time.monotonic())
+
+    async def verify(self, server_key: str) -> t.ServerInfo:
+        """Check a server key before you save it, e.g. in a ``/link`` command. Returns the
+        server's details (``Name``, ``OwnerId``, ``CurrentPlayers``...), so you can show which
+        server it is. Uses the pool's rate limits; doesn't add the server.
+
+        Raises:
+            oxrpy.AuthenticationError: The key is wrong, was regenerated, or the server doesn't
+                have the API package.
+        """
+        data = await self._client(server_key).get_server()
+        return data["Server"]
+
+    async def update_key(self, name: str, server_key: str) -> AsyncOxfordAPI:
+        """Swap in a new server key for ``name``, e.g. after the owner regenerated theirs.
+        Following carries on from where it was (from ``save_dir`` if you use one), and the
+        server leaves :attr:`failed`. Returns the new client."""
+        name = str(name)
+        old = self._servers[name]
+        await self._stop_server(name)
+        api = self._client(server_key)
+        api.latest = old.latest
+        if getattr(old, "cursor", None) is not None:
+            api.cursor = old.cursor  # type: ignore[attr-defined]
         self._servers[name] = api
         self.failed.pop(name, None)
+        stats = self._stats.setdefault(name, ServerStats())
+        stats.failed, stats.errors = None, 0
         if self._run_options is not None:
             self._start(name)
         return api
@@ -131,6 +223,7 @@ class AsyncServerPool:
             raise KeyError(name)
         await self._stop_server(str(name))
         self.failed.pop(str(name), None)
+        self._stats.pop(str(name), None)
 
     def __getitem__(self, name: str) -> AsyncOxfordAPI:
         return self._servers[str(name)]
@@ -160,7 +253,13 @@ class AsyncServerPool:
         server that failed has its exception instead of a result (one failure doesn't stop the
         others). Example: ``await pool.each(lambda api: api.get_players())``."""
         chosen = list(names) if names is not None else list(self._servers)
-        results = await asyncio.gather(*(action(self._servers[n]) for n in chosen), return_exceptions=True)
+        # Runs behind single requests (a Discord command's lookup, say), so one big job across
+        # every server doesn't hold up everyone else's.
+        token = BACKGROUND.set(True)
+        try:
+            results = await asyncio.gather(*(action(self._servers[n]) for n in chosen), return_exceptions=True)
+        finally:
+            BACKGROUND.reset(token)
         return dict(zip(chosen, results))  # type: ignore[arg-type]
 
     async def run_command_on_all(self, command: str, *, names: Optional[Sequence[str]] = None
@@ -257,8 +356,7 @@ class AsyncServerPool:
             await self._stop.wait()
         finally:
             self._run_options = None
-            for name in list(self._tasks):
-                await self._stop_server(name)
+            await self._stop_all()
 
     def stop(self) -> None:
         """Make :meth:`run_forever` return once every server has finished its current poll."""
@@ -270,6 +368,10 @@ class AsyncServerPool:
         stop = asyncio.Event()
         self._server_stops[name] = stop
         self._tasks[name] = asyncio.create_task(self._follow(name, stop), name=f"oxrpy:{name}")
+
+    async def _stop_all(self) -> None:
+        """Stop every server at once (one by one would keep the rest polling meanwhile)."""
+        await asyncio.gather(*(self._stop_server(name) for name in list(self._tasks)))
 
     async def _stop_server(self, name: str) -> None:
         stop = self._server_stops.pop(name, None)
@@ -287,8 +389,27 @@ class AsyncServerPool:
     async def _follow(self, name: str, stop: asyncio.Event) -> None:
         options = self._run_options or {}
         api = self._servers[name]
+        stats = self._stats.setdefault(name, ServerStats())
         save_dir = options.get("save_dir")
         save_to = save_dir / f"{_file_name(name)}.json" if save_dir is not None else None
+        # Carry on from a position kept in memory (after update_key) unless save_dir has one.
+        cursor = getattr(api, "cursor", None) if save_to is None else None
+
+        def polled(data: ServerData) -> None:
+            now = time.time()
+            if stats.last_poll is not None:
+                gap = now - stats.last_poll
+                stats.interval = gap if stats.interval is None else stats.interval * 0.7 + gap * 0.3
+            stats.last_poll = now
+            stats.polls += 1
+            stats.errors = 0
+            stats.online = bool(data.get("Online"))
+            server = data.get("Server")
+            stats.players = server.get("CurrentPlayers") if isinstance(server, dict) else None
+
+        async def poll_failed(exc: Exception) -> None:
+            stats.errors += 1
+
         try:
             await api._run(
                 self._handlers,
@@ -296,8 +417,11 @@ class AsyncServerPool:
                 stop=stop,
                 sections=options.get("sections", ()),
                 limit=options.get("limit"),
+                cursor=cursor,
                 skip_existing=options.get("skip_existing", True),
                 save_to=save_to,
+                on_error=poll_failed,
+                on_poll=polled,
                 adaptive=options.get("adaptive", True),
                 max_idle=options.get("max_idle", 5.0),
             )
@@ -305,11 +429,11 @@ class AsyncServerPool:
             raise
         except PERMANENT_ERRORS as exc:
             logger.error("Stopped following %s: %s", name, exc)
-            self.failed[name] = exc
+            self.failed[name] = stats.failed = exc
             await self._report(name, exc)
         except Exception as exc:  # noqa: BLE001 - one server's problem shouldn't stop the others
             logger.exception("Stopped following %s after an unexpected error", name)
-            self.failed[name] = exc
+            self.failed[name] = stats.failed = exc
             await self._report(name, exc)
 
     async def _report(self, name: str, exc: Exception) -> None:
@@ -321,12 +445,50 @@ class AsyncServerPool:
             except Exception:  # noqa: BLE001
                 logger.exception("Error handler %r raised", getattr(fn, "__name__", fn))
 
+    # ------------------------------------------------------------------ stats
+
+    @property
+    def read_limit(self) -> Optional[float]:
+        """Reads a second the pool keeps to across every server (``None``: no limit). Without
+        an app key that's the per-IP limit; with one, your app's limit (which follows what
+        Oxford reports, so custom tiers are picked up), capped by the per-IP limit."""
+        rates = []
+        if self._shared_limiters is not None:
+            rates.append(self._shared_limiters["data"].rate)
+        if self._ip_bucket is not None:
+            rates.append(self._ip_bucket.rate)
+        return min(rates) if rates else None
+
+    @property
+    def stats(self) -> PoolStats:
+        """How the pool is keeping up: overall figures, and each server's
+        :class:`ServerStats` in ``per_server``. Example::
+
+            stats = pool.stats
+            print(f"{stats.following} servers, updated about every {stats.average_interval:.1f}s")
+        """
+        now = time.monotonic()
+        recent = sum(1 for sent in self._sent if sent >= now - 10)
+        intervals = [s.interval for s in self._stats.values() if s.interval is not None and s.failed is None]
+        buckets = [b for b in ((self._shared_limiters or {}).get("data"), self._ip_bucket) if b is not None]
+        following = sum(1 for name, task in self._tasks.items() if not task.done() and name not in self.failed)
+        return PoolStats(
+            servers=len(self._servers),
+            following=following,
+            failed=len(self.failed),
+            read_limit=self.read_limit,
+            requests_per_second=recent / 10,
+            waiting=max((b.waiting for b in buckets), default=0),
+            average_interval=sum(intervals) / len(intervals) if intervals else None,
+            slowest_interval=max(intervals) if intervals else None,
+            per_server={name: ServerStats(**vars(s)) for name, s in self._stats.items()},
+        )
+
     # ------------------------------------------------------------------ lifecycle
 
     async def aclose(self) -> None:
         self.stop()
-        for name in list(self._tasks):
-            await self._stop_server(name)
+        await self._stop_all()
         if self._owns_client:
             await self.client.aclose()
 

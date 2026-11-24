@@ -98,8 +98,11 @@ class SyncSignatures:
         """A vehicle by registration (``"rj75flk"`` finds ``"RJ75 FLK"``), or else by its owner's
         name or user ID. ``None`` if there isn't one.
         """
-    def get_atms(self) -> Optional[List[t.Atm]]:
-        """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
+    def get_atms(self, *, max_age: float = 0) -> Optional[List[t.Atm]]:
+        """ATMs: availability, alarm, who robbed them (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]:
         """One page of the full audit log: ``{ Entries, Next, Total }``. Slower than the rest."""
     def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Optional[t.BansPage]:
@@ -124,24 +127,39 @@ class SyncSignatures:
         """The newest audit log entries. Last 100 kept."""
     def get_events(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Event]:
         """About 100 kinds of game event, newest first. Last 1,000 kept."""
-    def get_groups(self) -> Optional[List[t.Group]]:
-        """The server's groups and their members (``[]`` without AdvancedServer)."""
-    def get_incidents(self) -> Optional[t.Incidents]:
-        """The control room: open incidents, units, operators, timeline."""
+    def get_groups(self, *, max_age: float = 0) -> Optional[List[t.Group]]:
+        """The server's groups and their members (``[]`` without AdvancedServer).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+    def get_incidents(self, *, max_age: float = 0) -> Optional[t.Incidents]:
+        """The control room: open incidents, units, operators, timeline.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def get_joinlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.JoinLog]:
         """Joins and leaves, newest first. Last 500 kept."""
     def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.KillLog]:
         """Kills (downs), newest first. Last 500 kept."""
     def get_modcalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.ModCall]:
         """Help requests, responders and resolutions, newest first. Last 300 kept."""
-    def get_players(self) -> Optional[List[t.Player]]:
-        """Everyone in the server (``None`` while offline)."""
-    def get_queue(self) -> Optional[List[t.QueueEntry]]:
-        """Who's waiting to join, front first (``None`` while offline)."""
+    def get_players(self, *, max_age: float = 0) -> Optional[List[t.Player]]:
+        """Everyone in the server (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+    def get_queue(self, *, max_age: float = 0) -> Optional[List[t.QueueEntry]]:
+        """Who's waiting to join, front first (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def get_radiocalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.RadioCall]:
         """Radio calls, newest first. Last 500 kept."""
-    def get_robberies(self) -> Optional[List[t.Robbery]]:
-        """Robbery sites: state, stage, alarm, robbers (``None`` while offline)."""
+    def get_robberies(self, *, max_age: float = 0) -> Optional[List[t.Robbery]]:
+        """Robbery sites: state, stage, alarm, robbers (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def get_server(self) -> ServerData:
         """The always-returned fields: ``Online``, ``LastHeartbeat``, ``NextHeartbeat``,
         ``Cursor`` and ``Server`` (name, players, join code, packages…).
@@ -171,20 +189,32 @@ class SyncSignatures:
         """Every Server Management setting, keyed by name. Webhooks read ``"(set)"``."""
     def get_shots(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Shot]:
         """Every shot in the last 10 minutes, newest first."""
-    def get_staff(self) -> Optional[t.Staff]:
-        """``{ OwnerId, Staff: [...], Ranks: [...] }``."""
+    def get_staff(self, *, max_age: float = 0) -> Optional[t.Staff]:
+        """``{ OwnerId, Staff: [...], Ranks: [...] }``.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def get_status(self) -> t.ApiStatus:
         """The API's own health (``GET /status``): status, uptime and response times.
         Needs no key; don't ask more than every 30 seconds.
         """
-    def get_teams(self) -> Optional[t.Teams]:
-        """Players, limits and access per team."""
+    def get_teams(self, *, max_age: float = 0) -> Optional[t.Teams]:
+        """Players, limits and access per team.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def get_tracks(self) -> Optional[t.Tracks]:
         """Per-second position samples since the last report (``None`` while offline)."""
-    def get_vehicles(self) -> Optional[List[t.Vehicle]]:
-        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline)."""
-    def get_world(self) -> Optional[t.World]:
-        """Weather, temperature, clock, locks, speed limit, sticky message, countdown."""
+    def get_vehicles(self, *, max_age: float = 0) -> Optional[List[t.Vehicle]]:
+        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+    def get_world(self, *, max_age: float = 0) -> Optional[t.World]:
+        """Weather, temperature, clock, locks, speed limit, sticky message, countdown.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     def give(self, players: Target, tool: str, *, check: bool = True) -> t.CommandResult:
         """Give a RoleplayKit tool: megaphone, firestarter, lectern, flag or staffcuffs."""
     def group_add(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult:
@@ -381,8 +411,11 @@ class AsyncSignatures:
         """A vehicle by registration (``"rj75flk"`` finds ``"RJ75 FLK"``), or else by its owner's
         name or user ID. ``None`` if there isn't one.
         """
-    async def get_atms(self) -> Optional[List[t.Atm]]:
-        """ATMs: availability, alarm, who robbed them (``None`` while offline)."""
+    async def get_atms(self, *, max_age: float = 0) -> Optional[List[t.Atm]]:
+        """ATMs: availability, alarm, who robbed them (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def get_audit(self, *, before: Optional[int] = None, category: Union[str, Iterable[str], None] = None, user: Union[str, int, None] = None, limit: Optional[int] = None) -> Optional[t.AuditPage]:
         """One page of the full audit log: ``{ Entries, Next, Total }``. Slower than the rest."""
     async def get_bans(self, *, limit: Optional[int] = None, offset: Optional[int] = None) -> Optional[t.BansPage]:
@@ -407,24 +440,39 @@ class AsyncSignatures:
         """The newest audit log entries. Last 100 kept."""
     async def get_events(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Event]:
         """About 100 kinds of game event, newest first. Last 1,000 kept."""
-    async def get_groups(self) -> Optional[List[t.Group]]:
-        """The server's groups and their members (``[]`` without AdvancedServer)."""
-    async def get_incidents(self) -> Optional[t.Incidents]:
-        """The control room: open incidents, units, operators, timeline."""
+    async def get_groups(self, *, max_age: float = 0) -> Optional[List[t.Group]]:
+        """The server's groups and their members (``[]`` without AdvancedServer).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+    async def get_incidents(self, *, max_age: float = 0) -> Optional[t.Incidents]:
+        """The control room: open incidents, units, operators, timeline.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def get_joinlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.JoinLog]:
         """Joins and leaves, newest first. Last 500 kept."""
     async def get_killlogs(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.KillLog]:
         """Kills (downs), newest first. Last 500 kept."""
     async def get_modcalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.ModCall]:
         """Help requests, responders and resolutions, newest first. Last 300 kept."""
-    async def get_players(self) -> Optional[List[t.Player]]:
-        """Everyone in the server (``None`` while offline)."""
-    async def get_queue(self) -> Optional[List[t.QueueEntry]]:
-        """Who's waiting to join, front first (``None`` while offline)."""
+    async def get_players(self, *, max_age: float = 0) -> Optional[List[t.Player]]:
+        """Everyone in the server (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+    async def get_queue(self, *, max_age: float = 0) -> Optional[List[t.QueueEntry]]:
+        """Who's waiting to join, front first (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def get_radiocalls(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.RadioCall]:
         """Radio calls, newest first. Last 500 kept."""
-    async def get_robberies(self) -> Optional[List[t.Robbery]]:
-        """Robbery sites: state, stage, alarm, robbers (``None`` while offline)."""
+    async def get_robberies(self, *, max_age: float = 0) -> Optional[List[t.Robbery]]:
+        """Robbery sites: state, stage, alarm, robbers (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def get_server(self) -> ServerData:
         """The always-returned fields: ``Online``, ``LastHeartbeat``, ``NextHeartbeat``,
         ``Cursor`` and ``Server`` (name, players, join code, packages…).
@@ -454,20 +502,32 @@ class AsyncSignatures:
         """Every Server Management setting, keyed by name. Webhooks read ``"(set)"``."""
     async def get_shots(self, *, since: Optional[int] = None, limit: Optional[int] = None) -> List[t.Shot]:
         """Every shot in the last 10 minutes, newest first."""
-    async def get_staff(self) -> Optional[t.Staff]:
-        """``{ OwnerId, Staff: [...], Ranks: [...] }``."""
+    async def get_staff(self, *, max_age: float = 0) -> Optional[t.Staff]:
+        """``{ OwnerId, Staff: [...], Ranks: [...] }``.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def get_status(self) -> t.ApiStatus:
         """The API's own health (``GET /status``): status, uptime and response times.
         Needs no key; don't ask more than every 30 seconds.
         """
-    async def get_teams(self) -> Optional[t.Teams]:
-        """Players, limits and access per team."""
+    async def get_teams(self, *, max_age: float = 0) -> Optional[t.Teams]:
+        """Players, limits and access per team.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def get_tracks(self) -> Optional[t.Tracks]:
         """Per-second position samples since the last report (``None`` while offline)."""
-    async def get_vehicles(self) -> Optional[List[t.Vehicle]]:
-        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline)."""
-    async def get_world(self) -> Optional[t.World]:
-        """Weather, temperature, clock, locks, speed limit, sticky message, countdown."""
+    async def get_vehicles(self, *, max_age: float = 0) -> Optional[List[t.Vehicle]]:
+        """Every vehicle out, with emergency lights, siren, occupants… (``None`` while offline).
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
+    async def get_world(self, *, max_age: float = 0) -> Optional[t.World]:
+        """Weather, temperature, clock, locks, speed limit, sticky message, countdown.
+
+        With ``max_age``, answers from ``api.latest`` without a request if it's that fresh.
+        """
     async def give(self, players: Target, tool: str, *, check: bool = True) -> t.CommandResult:
         """Give a RoleplayKit tool: megaphone, firestarter, lectern, flag or staffcuffs."""
     async def group_add(self, user: Target, group: str, *, check: bool = True) -> t.CommandResult:

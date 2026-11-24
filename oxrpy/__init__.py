@@ -29,7 +29,7 @@ from .follower import LogFollower  # noqa: E402
 from .live import LiveState  # noqa: E402
 from .lookup import AmbiguousMatchError  # noqa: E402
 from ._base import RequestInfo  # noqa: E402
-from .pool import AsyncServerPool  # noqa: E402
+from .pool import AsyncServerPool, PoolStats, ServerStats  # noqa: E402
 from .state import FileState, StateStore  # noqa: E402
 from .ratelimit import AsyncTokenBucket, TokenBucket  # noqa: E402
 
@@ -37,6 +37,8 @@ __all__ = [
     "OxfordAPI",
     "AsyncOxfordAPI",
     "AsyncServerPool",
+    "PoolStats",
+    "ServerStats",
     "FileState",
     "StateStore",
     "ServerData",

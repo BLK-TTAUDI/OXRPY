@@ -16,7 +16,7 @@ import inspect
 import time
 from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
-from ._base import BASE_URL, MAX_BATCH, BaseClient, ServerData, _apply_change, _decode, _setting_to_change, _Spec, logger
+from ._base import BACKGROUND, BASE_URL, MAX_BATCH, BaseClient, ServerData, _apply_change, _decode, _setting_to_change, _Spec, logger
 from .errors import OxfordAPIError, RateLimitError
 from .events import Handlers, ServerWatcher, dispatch_plan
 from .follower import _FollowerBase
@@ -82,10 +82,14 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         if spec.headers:
             headers.update(spec.headers)
         attempt = 0
+        # Background polling waits its turn behind requests you make yourself, for as long as
+        # it takes: with thousands of servers on one limit, a long queue is expected.
+        background = BACKGROUND.get()
+        priority, wait_limit = (1, None) if background else (0, 60.0)
         while True:
-            if bucket is not None and not await bucket.acquire(timeout=60):
+            if bucket is not None and not await bucket.acquire(timeout=wait_limit, priority=priority):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
-            if self._ip_bucket is not None and not await self._ip_bucket.acquire(timeout=60):
+            if self._ip_bucket is not None and not await self._ip_bucket.acquire(timeout=wait_limit, priority=priority):
                 raise RateLimitError(f"Timed out waiting for a rate limit slot for {spec.path}")
             started = time.monotonic()
             try:
@@ -273,11 +277,12 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         skip_existing: bool = True,
         save_to: Any = None,
         on_error: Optional[Callable[[OxfordAPIError], Any]] = None,
+        on_poll: Optional[Callable[[ServerData], Any]] = None,
         adaptive: bool = False,
         max_idle: float = 5.0,
     ) -> None:
         """The polling loop behind :meth:`run_forever` (and :class:`~oxrpy.AsyncServerPool`).
-        ``invoke(fn, arg)`` calls one handler."""
+        ``invoke(fn, arg)`` calls one handler; ``on_poll(data)`` is told about each poll."""
         follower = AsyncLogFollower(self, handlers.logs_needed(), sections=sections, limit=limit,
                                     cursor=cursor, save_to=save_to, adaptive=adaptive, max_idle=max_idle)
         skip = skip_existing and follower.cursor is None
@@ -298,6 +303,8 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
                 await call(fn, exc)
 
         async for data, new in follower.iter(stop=stop, on_error=errored):
+            if on_poll is not None:
+                on_poll(data)
             for fn, arg in dispatch_plan(handlers, watcher, data, new, skip):
                 await call(fn, arg)
             skip = False
@@ -332,7 +339,11 @@ class AsyncLogFollower(_FollowerBase):
     async def poll(self) -> Tuple[ServerData, Dict[str, List[dict]]]:
         """Make one request. Errors are raised, not retried."""
         names, kwargs = self._request_args()
-        data = await self.api.get_server_data(*names, **kwargs)
+        token = BACKGROUND.set(True)
+        try:
+            data = await self.api.get_server_data(*names, **kwargs)
+        finally:
+            BACKGROUND.reset(token)
         assert data is not None
         return data, self._process(data)
 
@@ -356,7 +367,7 @@ class AsyncLogFollower(_FollowerBase):
 
         while stop is None or not stop.is_set():
             try:
-                data, new = await self.poll()
+                polled = await self._poll_unless_stopped(stop)
             except OxfordAPIError as exc:
                 delay = self._after_error(exc, retry)
                 if on_error is not None:
@@ -365,9 +376,37 @@ class AsyncLogFollower(_FollowerBase):
                         await result
                 await wait(delay)
                 continue
+            if polled is None:
+                break
+            data, new = polled
             yield data, new
             self.save()  # only once the caller has dealt with this poll
             await wait(self.next_delay(data))
+
+    async def _poll_unless_stopped(
+        self, stop: Optional[asyncio.Event]
+    ) -> Optional[Tuple[ServerData, Dict[str, List[dict]]]]:
+        """Poll, but give up (returning ``None``) if ``stop`` is set first. A poll can wait a
+        while for its turn when many servers share one rate limit, and stopping shouldn't."""
+        if stop is None:
+            return await self.poll()
+        poll = asyncio.ensure_future(self.poll())
+        stopped = asyncio.ensure_future(stop.wait())
+        try:
+            await asyncio.wait({poll, stopped}, return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:
+            poll.cancel()
+            raise
+        finally:
+            stopped.cancel()
+        if poll.done():
+            return poll.result()
+        poll.cancel()  # still waiting for its turn (or its answer): nothing was handled yet
+        try:
+            await poll
+        except BaseException:  # noqa: BLE001 - the cancellation (or a late error) we asked for
+            pass
+        return None
 
     def __aiter__(self) -> AsyncIterator[Tuple[ServerData, Dict[str, List[dict]]]]:
         return self.iter()
