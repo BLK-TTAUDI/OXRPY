@@ -17,7 +17,6 @@ Nothing in this release should break existing code.
   first; the poll loop does the retrying.
 - **Faster bookkeeping** for large pools: request counts and the JavaScript version's queues no
   longer slow down with thousands of servers.
-- `scripts/release.py`: one command to check, bump, test, commit, tag and publish a release.
 
 ## 2.5.0
 

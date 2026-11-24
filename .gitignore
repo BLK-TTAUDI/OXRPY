@@ -10,4 +10,3 @@ venv/
 .pypirc
 .claude/
 .coverage
-.release-notes.md

@@ -56,7 +56,7 @@ TOP = {"Online": True, "LastHeartbeat": 100, "NextHeartbeat": 101, "Cursor": 50,
 
 
 def test_version_and_exports():
-    # The newest released version in the changelog is this one (scripts/release.py keeps them in step)
+    # The newest released version in the changelog is this one
     import re
     from pathlib import Path
     changelog = (Path(__file__).resolve().parent.parent / "CHANGELOG.md").read_text(encoding="utf-8")
