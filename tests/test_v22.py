@@ -274,13 +274,8 @@ def test_tests_are_not_shipped_in_the_source_package():
     assert "prune tests" in manifest
 
 
-def test_readme_sections_for_the_docs_site_are_intact():
-    """The docs site (a separate repo) pulls each guide page from a marked README section.
-    Every section that's started must be ended, once, in order."""
+def test_readme_points_to_the_docs_site():
+    """The README is a short introduction; the documentation lives on oxrpy.org."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    starts = re.findall(r"<!-- --8<-- \[start:([a-z-]+)\] -->", readme)
-    ends = re.findall(r"<!-- --8<-- \[end:([a-z-]+)\] -->", readme)
-    assert starts and starts == ends and len(set(starts)) == len(starts)
-    for needed in ("intro", "getting-started", "reading-data", "events", "commands", "async",
-                   "many-servers", "map", "cli", "examples"):
-        assert needed in starts
+    assert "https://oxrpy.org" in readme
+    assert "--8<--" not in readme  # the docs site no longer pulls sections from here
