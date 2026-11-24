@@ -277,5 +277,7 @@ def test_tests_are_not_shipped_in_the_source_package():
 def test_readme_points_to_the_docs_site():
     """The README is a short introduction; the documentation lives on oxrpy.org."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "https://oxrpy.org" in readme
+    from urllib.parse import urlsplit
+    hosts = {urlsplit(link).hostname for link in re.findall(r"\]\((https?://[^)]+)\)", readme)}
+    assert "oxrpy.org" in hosts
     assert "--8<--" not in readme  # the docs site no longer pulls sections from here
