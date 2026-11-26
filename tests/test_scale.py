@@ -9,7 +9,7 @@ import pytest
 
 import oxrpy
 from oxrpy import AsyncOxfordAPI, AsyncServerPool, AsyncTokenBucket, AuthenticationError, PoolStats
-from test_client import TOP
+from test_client import TOP, client, make_response
 
 
 # ---------------------------------------------------------------- the fair limiter
@@ -410,3 +410,56 @@ def test_resuming_from_a_saved_position_fetches_everything(tmp_path, monkeypatch
         assert "Limit" not in calls[0] and calls[0]["Since"] == "5"
 
     asyncio.run(main())
+
+
+# ---------------------------------------------------------------- slow handlers
+
+def test_a_slow_handler_is_warned_about_and_shows_in_stats(monkeypatch, caplog):
+    monkeypatch.setattr(oxrpy.events, "SLOW_HANDLER_SECONDS", 0.05)
+    monkeypatch.setattr(oxrpy.follower._FollowerBase, "next_delay", lambda self, data=None, **kw: 0.01)
+
+    async def main():
+        seq = {"n": 0}
+
+        def handler(request):
+            seq["n"] += 1
+            return httpx.Response(200, json=entries(seq["n"]))
+
+        pool = pool_from(handler)
+        pool.add("a", "key-a")
+
+        @pool.on("Kill")
+        async def slow_kill_feed(server, kill):
+            await asyncio.sleep(0.1)
+
+        runner = asyncio.create_task(pool.run_forever())
+        await asyncio.sleep(0.5)
+        stats = pool.stats.per_server["a"]
+        pool.stop()
+        await runner
+        assert stats.handler_time is not None and stats.handler_time >= 0.1
+
+    with caplog.at_level("WARNING", logger="oxrpy"):
+        asyncio.run(main())
+    slow = [r.getMessage() for r in caplog.records if "took" in r.getMessage()]
+    assert slow and "slow_kill_feed" in slow[0] and "oxrpy.org/guide/events/#slow-handlers" in slow[0]
+
+
+def test_quick_handlers_arent_warned_about(caplog):
+    api, _ = client(make_response(body=dict(TOP, KillLogs=[{"Seq": 1, "Type": "Kill"}])))
+    api.on("Kill", lambda kill: api.stop())
+    with caplog.at_level("WARNING", logger="oxrpy"):
+        api._safely(lambda kill: None, {})
+    assert not [r for r in caplog.records if "took" in r.getMessage()]
+
+
+def test_sync_client_warns_about_slow_handlers_too(monkeypatch, caplog):
+    monkeypatch.setattr(oxrpy.events, "SLOW_HANDLER_SECONDS", 0.05)
+    api, _ = client(make_response(body=TOP))
+
+    def slow_handler(arg):
+        time.sleep(0.1)
+
+    with caplog.at_level("WARNING", logger="oxrpy"):
+        api._safely(slow_handler, {})
+    assert any("slow_handler" in r.getMessage() for r in caplog.records)

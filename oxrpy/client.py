@@ -27,7 +27,7 @@ from ._base import (  # noqa: F401  (re-exported for 2.0 imports)
     logger,
 )
 from .errors import OxfordAPIError, RateLimitError
-from .events import ServerWatcher, dispatch_plan
+from .events import ServerWatcher, dispatch_plan, warn_if_slow
 from .follower import LogFollower
 from ._signatures import SyncSignatures
 from .types import AuditEntry, Ban, CommandResult, CommandStatus
@@ -302,10 +302,12 @@ class OxfordAPI(SyncSignatures, BaseClient):
         self._stop.set()
 
     def _safely(self, fn: Callable[..., Any], arg: Any) -> None:
+        started = time.monotonic()
         try:
             fn(arg)
         except Exception:  # noqa: BLE001 - one bad handler shouldn't stop the bot
             logger.exception("Handler %r raised", getattr(fn, "__name__", fn))
+        warn_if_slow(fn, time.monotonic() - started)
 
     def _dispatch_error(self, exc: OxfordAPIError) -> None:
         for fn in self._handlers.get("error"):

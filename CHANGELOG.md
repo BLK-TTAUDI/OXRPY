@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Slow handlers are reported:** a handler that takes more than 5 seconds now logs a warning
+  saying which one and how long it took. Handlers run one at a time and the next poll waits for
+  them, so before, a slow one just left the bot quietly behind. In a pool,
+  `pool.stats.per_server[name].handler_time` shows how long the last poll's handlers took. See
+  [Slow handlers](https://oxrpy.org/guide/events/#slow-handlers) for handing slow work off.
+
 ## 2.6.0
 
 Nothing in this release should break existing code.

@@ -18,7 +18,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, List
 
 from ._base import BACKGROUND, BASE_URL, MAX_BATCH, BaseClient, ServerData, _apply_change, _decode, _setting_to_change, _Spec, logger
 from .errors import OxfordAPIError, RateLimitError
-from .events import Handlers, ServerWatcher, dispatch_plan
+from .events import Handlers, ServerWatcher, dispatch_plan, warn_if_slow
 from .follower import _FollowerBase
 from ._signatures import AsyncSignatures
 from .types import AuditEntry, Ban, CommandResult, CommandStatus
@@ -291,6 +291,7 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         max_idle: float = 5.0,
         max_api_error_delay: Optional[float] = None,
         wake: Optional[Callable[[], Any]] = None,
+        on_handled: Optional[Callable[[float], Any]] = None,
     ) -> None:
         """The polling loop behind :meth:`run_forever` (and :class:`~oxrpy.AsyncServerPool`).
         ``invoke(fn, arg)`` calls one handler; ``on_poll(data)`` is told about each poll."""
@@ -305,12 +306,14 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         watcher = ServerWatcher()
 
         async def call(fn: Callable[..., Any], arg: Any) -> None:
+            started = time.monotonic()
             try:
                 result = invoke(fn, arg)
                 if inspect.isawaitable(result):
                     await result
             except Exception:  # noqa: BLE001 - one bad handler shouldn't stop the bot
                 logger.exception("Handler %r raised", getattr(fn, "__name__", fn))
+            warn_if_slow(fn, time.monotonic() - started)
 
         async def errored(exc: OxfordAPIError) -> None:
             if on_error is not None:
@@ -321,8 +324,11 @@ class AsyncOxfordAPI(AsyncSignatures, BaseClient):
         async for data, new in follower.iter(stop=stop, on_error=errored):
             if on_poll is not None:
                 on_poll(data)
+            started = time.monotonic()
             for fn, arg in dispatch_plan(handlers, watcher, data, new, skip):
                 await call(fn, arg)
+            if on_handled is not None:
+                on_handled(time.monotonic() - started)
             skip = False
         self.cursor = follower.cursor
 

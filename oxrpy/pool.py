@@ -170,6 +170,9 @@ class ServerStats:
     online: Optional[bool] = None
     #: Players in the server at the last poll.
     players: Optional[int] = None
+    #: Seconds your handlers took over the last poll's events. The next poll waits for them, so
+    #: if this is high, that server's events are arriving late (hand slow work off; see the docs).
+    handler_time: Optional[float] = None
     #: Why following stopped for good (e.g. the key was regenerated), or ``None``.
     failed: Optional[Exception] = None
 
@@ -507,6 +510,9 @@ class AsyncServerPool:
             server = data.get("Server")
             stats.players = server.get("CurrentPlayers") if isinstance(server, dict) else None
 
+        def handled(seconds: float) -> None:
+            stats.handler_time = seconds
+
         async def poll_failed(exc: Exception) -> None:
             stats.errors += 1
             if is_api_problem(exc):
@@ -526,6 +532,7 @@ class AsyncServerPool:
                 save_to=save_to,
                 on_error=poll_failed,
                 on_poll=polled,
+                on_handled=handled,
                 adaptive=options.get("adaptive", True),
                 max_idle=options.get("max_idle", 5.0),
                 # The outage gate does the long waiting, so a server comes back soon after the API.

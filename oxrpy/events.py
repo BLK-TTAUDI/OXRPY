@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
@@ -132,3 +134,19 @@ def ordered_entries(new: Dict[str, List[dict]]) -> List[Tuple[str, dict]]:
     items = [(log, entry) for log, entries in new.items() for entry in entries]
     items.sort(key=lambda item: (item[1].get("Seq") is None, item[1].get("Seq") or 0))
     return items
+
+
+#: A handler that takes longer than this (seconds) gets a warning in the log.
+SLOW_HANDLER_SECONDS = 5.0
+
+
+def warn_if_slow(fn: Any, seconds: float) -> None:
+    """Log a warning for a slow handler. Handlers run one at a time, in the order things happened,
+    and the next poll waits for them, so a slow one leaves the bot behind without any error."""
+    if seconds >= SLOW_HANDLER_SECONDS:
+        logging.getLogger("oxrpy").warning(
+            "Handler %s took %.1fs. The next poll waits for handlers, so events are arriving that "
+            "much later. Hand slow work (a database write, a big upload) off to run separately: "
+            "https://oxrpy.org/guide/events/#slow-handlers",
+            getattr(fn, "__name__", repr(fn)), seconds,
+        )
