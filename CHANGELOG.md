@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.7.0
 
 - **Slow handlers are reported:** a handler that takes more than 5 seconds now logs a warning
   saying which one and how long it took. Handlers run one at a time and the next poll waits for
